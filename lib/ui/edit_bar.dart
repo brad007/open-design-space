@@ -51,6 +51,7 @@ class EditBar extends StatelessWidget {
     final t = ed.single;
     if (ed.tool == Tool.node && ed.nodeTarget != null) return _node(context);
     if (t is TextObject) return _text(context, t);
+    if (ed.textAndPath case (final text, final path)) return _text(context, text, path: path);
     if (t is ImageObject) return _image(context, t);
     if (ed.selection.isNotEmpty) return _combine(context);
     return _hint(context);
@@ -290,7 +291,9 @@ class EditBar extends StatelessWidget {
     );
   }
 
-  Widget _text(BuildContext context, TextObject t) {
+  /// [path] is the shape selected along with the text, which it can be put on.
+  Widget _text(BuildContext context, TextObject t, {PathObject? path}) {
+    final onPath = t.pathId != null;
     if (textController.text != t.text && !textFocus.hasFocus) textController.text = t.text;
     final u = ed.project.units;
     final styles = ed.fonts.stylesOf(t.fontFamily);
@@ -373,29 +376,48 @@ class EditBar extends StatelessWidget {
           width: 66,
           onChanged: (v) => ed.editText(t, (t) => t.lineSpacing = v.clamp(0.3, 5)),
         ),
-        const SizedBox(width: 8),
-        const Text('Curve'),
-        SizedBox(
-          width: scaled(context, 130),
-          child: Slider(
-            value: t.curve.clamp(-360, 360),
-            min: -360,
-            max: 360,
-            onChangeStart: (_) => ed.beginGesture(),
-            onChanged: (v) {
-              t.curve = (v.abs() < 4 ? 0 : v).roundToDouble();
-              ed.updateGesture();
-            },
-            onChangeEnd: (_) => ed.endGesture(),
+        if (!onPath) ...[
+          const SizedBox(width: 8),
+          const Text('Curve'),
+          SizedBox(
+            width: scaled(context, 130),
+            child: Slider(
+              value: t.curve.clamp(-360, 360),
+              min: -360,
+              max: 360,
+              onChangeStart: (_) => ed.beginGesture(),
+              onChanged: (v) {
+                t.curve = (v.abs() < 4 ? 0 : v).roundToDouble();
+                ed.updateGesture();
+              },
+              onChangeEnd: (_) => ed.endGesture(),
+            ),
           ),
-        ),
-        NumberField(
-          value: t.curve,
-          decimals: 0,
-          width: 76,
-          suffix: '°',
-          onChanged: (v) => ed.editText(t, (t) => t.curve = v.clamp(-360, 360)),
-        ),
+          NumberField(
+            value: t.curve,
+            decimals: 0,
+            width: 76,
+            suffix: '°',
+            onChanged: (v) => ed.editText(t, (t) => t.curve = v.clamp(-360, 360)),
+          ),
+        ] else
+          ..._pathControls(context, t),
+        const SizedBox(width: 8),
+        if (onPath)
+          TextButton.icon(
+            onPressed: () => ed.releaseTextFromPath(t),
+            icon: const Icon(Icons.link_off, size: 18),
+            label: const Text('Release from path'),
+          ),
+        if (!onPath || (path != null && path.id != t.pathId))
+          Tooltip(
+            message: path == null ? 'Select this text and a shape to lay the text along it' : 'Lay the text along "${path.name}"',
+            child: TextButton.icon(
+              onPressed: path == null ? null : ed.putTextOnPath,
+              icon: const Icon(Icons.gesture_outlined, size: 18),
+              label: const Text('Put on path'),
+            ),
+          ),
         const SizedBox(width: 8),
         SegmentedButton<TextAlign2>(
           showSelectedIcon: false,
@@ -424,6 +446,49 @@ class EditBar extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  List<Widget> _pathControls(BuildContext context, TextObject t) {
+    final u = ed.project.units;
+    return [
+      const SizedBox(width: 8),
+      const Text('Start'),
+      SizedBox(
+        width: scaled(context, 130),
+        child: Slider(
+          value: t.pathStart.clamp(0, 1),
+          onChangeStart: (_) => ed.beginGesture(),
+          onChanged: (v) {
+            t.pathStart = v;
+            ed.updateGesture();
+          },
+          onChangeEnd: (_) => ed.endGesture(),
+        ),
+      ),
+      NumberField(
+        value: t.pathStart * 100,
+        decimals: 0,
+        width: 72,
+        suffix: '%',
+        onChanged: (v) => ed.editText(t, (t) => t.pathStart = (v / 100).clamp(0, 1)),
+      ),
+      const SizedBox(width: 4),
+      NumberField(
+        label: 'Offset',
+        suffix: u.suffix,
+        value: u.fromMm(t.pathOffset),
+        onChanged: (v) => ed.editText(t, (t) => t.pathOffset = u.toMm(v)),
+      ),
+      const SizedBox(width: 4),
+      Tooltip(
+        message: 'Run the text along the other side of the path (inside a closed shape)',
+        child: FilterChip(
+          label: const Text('Other side'),
+          selected: t.pathFlip,
+          onSelected: (v) => ed.editText(t, (t) => t.pathFlip = v),
+        ),
+      ),
+    ];
   }
 
   Future<String?> _multilineText(BuildContext context, String initial) {
@@ -461,6 +526,11 @@ class EditBar extends StatelessWidget {
       if (img.cutOutline != null) TextButton(onPressed: ed.clearCutOutline, child: const Text('Cut the rectangle instead')),
       TextButton.icon(onPressed: () => ed.setTool(Tool.crop), icon: const Icon(Icons.crop, size: 18), label: const Text('Crop')),
       if (img.crop != null) TextButton(onPressed: () => ed.setProperty((o) => (o as ImageObject).crop = null), child: const Text('Uncrop')),
+      TextButton.icon(
+        onPressed: () => showRemoveBackgroundDialog(context, ed),
+        icon: const Icon(Icons.layers_clear_outlined, size: 18),
+        label: const Text('Remove background'),
+      ),
       const SizedBox(width: 8),
       Text(
         img.operation == Operation.print

@@ -299,6 +299,59 @@ Future<void> showTraceDialog(BuildContext context, EditorController ed) async {
   }
 }
 
+Future<void> showRemoveBackgroundDialog(BuildContext context, EditorController ed) async {
+  int? color;
+  var tolerance = 0.15;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, set) => AlertDialog(
+        title: const Text('Remove background'),
+        content: SizedBox(
+          width: 360,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Clears the colour around the edge of the image. The same colour inside the artwork is kept.'),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Corner colour')),
+                ButtonSegment(value: true, label: Text('Pick a colour')),
+              ],
+              selected: {color != null},
+              onSelectionChanged: (s) async {
+                if (!s.first) return set(() => color = null);
+                final c = await pickColor(context, color ?? 0xFFFFFFFF);
+                if (c != null) set(() => color = c);
+              },
+            ),
+            if (color != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(color: Color(color!), shape: BoxShape.circle, border: Border.all(color: Colors.black26)),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Background colour'),
+                ]),
+              ),
+            const SizedBox(height: 12),
+            Text('Tolerance ${(tolerance * 100).round()}%'),
+            Slider(value: tolerance, min: 0.01, max: 0.6, onChanged: (v) => set(() => tolerance = v)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+        ],
+      ),
+    ),
+  );
+  if (ok == true) await ed.removeImageBackground(color: color, tolerance: tolerance);
+}
+
 Future<void> showRestorePoints(BuildContext context, EditorController ed) async {
   final times = await ed.store.snapshots(ed.project.meta.id);
   if (!context.mounted) return;

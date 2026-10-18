@@ -194,6 +194,10 @@ class TextObject extends DesignObject {
     this.curve = 0,
     this.align = TextAlign2.left,
     this.useKerning = true,
+    this.pathId,
+    this.pathStart = 0,
+    this.pathOffset = 0,
+    this.pathFlip = false,
     super.color,
     super.operation,
     super.xform,
@@ -217,6 +221,26 @@ class TextObject extends DesignObject {
   TextAlign2 align;
   bool useKerning;
 
+  /// The shape whose outline the text follows. Null lays the text out on its
+  /// own, straight or curved.
+  String? pathId;
+
+  /// Where the text is anchored along the path, as a fraction of its length.
+  /// [align] decides whether the text starts, centers or ends there.
+  double pathStart;
+
+  /// Distance in millimetres between the path and the text's baseline,
+  /// positive away from the path on the text's side.
+  double pathOffset;
+
+  /// Runs the text the other way round the path, so it sits on the other side
+  /// (inside a closed shape instead of outside).
+  bool pathFlip;
+
+  /// World point the path-following outline is centered on, so a stray move
+  /// of the text alone snaps it back onto its path. Not saved.
+  Offset? pathAnchor;
+
   List<Contour> outline = [];
 
   /// The parameters [outline] was generated from.
@@ -226,7 +250,8 @@ class TextObject extends DesignObject {
   bool fontMissing = false;
 
   String get layoutKey =>
-      '$text|$fontFamily|$fontStyle|$size|$letterSpacing|$lineSpacing|$curve|${align.name}|$useKerning';
+      '$text|$fontFamily|$fontStyle|$size|$letterSpacing|$lineSpacing|$curve|${align.name}|$useKerning'
+      '${pathId == null ? '' : '|path:$pathId|$pathStart|$pathOffset|$pathFlip'}';
 
   @override
   String get kind => 'text';
@@ -246,6 +271,7 @@ class TextObject extends DesignObject {
         'curve': curve,
         'align': align.name,
         'kern': useKerning,
+        if (pathId != null) 'onPath': {'id': pathId, 'start': pathStart, 'offset': pathOffset, 'flip': pathFlip},
         'outline': [for (final c in outline) c.toJson()],
         'outlineKey': outlineKey,
       };
@@ -264,6 +290,13 @@ class TextObject extends DesignObject {
       align: TextAlign2.values.asNameMap()[j['align']] ?? TextAlign2.left,
       useKerning: j['kern'] as bool? ?? true,
     );
+    if (j['onPath'] case final Map<String, dynamic> p) {
+      t
+        ..pathId = p['id'] as String?
+        ..pathStart = (p['start'] as num? ?? 0).toDouble()
+        ..pathOffset = (p['offset'] as num? ?? 0).toDouble()
+        ..pathFlip = p['flip'] as bool? ?? false;
+    }
     t.outline = [for (final c in (j['outline'] as List? ?? [])) Contour.fromJson(c)];
     t.outlineKey = j['outlineKey'] as String? ?? '';
     return t;
@@ -283,7 +316,12 @@ class TextObject extends DesignObject {
       curve: curve,
       align: align,
       useKerning: useKerning,
+      pathId: pathId,
+      pathStart: pathStart,
+      pathOffset: pathOffset,
+      pathFlip: pathFlip,
     )
+      ..pathAnchor = pathAnchor
       ..outline = [for (final c in outline) c.copy()]
       ..outlineKey = outlineKey
       ..fontMissing = fontMissing;
@@ -305,7 +343,9 @@ class ImageObject extends DesignObject {
     super.xform,
   }) : super(operation: Operation.print, color: 0xFF000000);
 
-  final String assetId;
+  /// Replaced when the picture is edited (background removal); the old asset
+  /// stays in the project so undo can return to it.
+  String assetId;
 
   /// Size in millimetres at scale 1.
   double width, height;
