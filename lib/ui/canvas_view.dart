@@ -46,7 +46,7 @@ class CanvasViewport extends ChangeNotifier {
 
 enum _Handle { tl, t, tr, r, br, b, bl, l, rotate }
 
-enum _Drag { none, pan, move, scale, rotate, marquee, node, handleIn, handleOut, pen, eraser, crop }
+enum _Drag { none, pan, pinch, move, scale, rotate, marquee, node, handleIn, handleOut, pen, eraser, crop }
 
 class CanvasView extends StatefulWidget {
   const CanvasView({
@@ -88,6 +88,43 @@ class _CanvasViewState extends State<CanvasView> {
   Offset lastTapPos = Offset.zero;
   (int, int)? dragNode;
   double startAngle = 0;
+
+  /// Active pointers, for two-finger pinch and pan.
+  final pointers = <int, Offset>{};
+  bool _touch = false;
+  Offset _pinchCenter = Offset.zero;
+  double _pinchDistance = 1;
+
+  /// Fingers need bigger targets than a mouse.
+  double get _hitRadius => _touch ? 16 : 7;
+
+  (Offset, double) _pinchState() {
+    final pts = pointers.values.take(2).toList();
+    return ((pts[0] + pts[1]) / 2, math.max((pts[0] - pts[1]).distance, 1));
+  }
+
+  /// A second finger cancels whatever the first one started and begins a
+  /// pinch: zoom with the spread, pan with the midpoint.
+  void _startPinch() {
+    switch (drag) {
+      case _Drag.move || _Drag.scale || _Drag.rotate:
+        _restoreStart();
+        ed.endGesture();
+      case _Drag.node || _Drag.handleIn || _Drag.handleOut:
+        // Keep the point where the first finger left it.
+        ed.endGesture();
+      default:
+        break;
+    }
+    stroke = [];
+    marquee = null;
+    guides = [];
+    drag = _Drag.pinch;
+    final (c, d) = _pinchState();
+    _pinchCenter = c;
+    _pinchDistance = d;
+    setState(() {});
+  }
 
   @override
   void initState() {
@@ -133,7 +170,7 @@ class _CanvasViewState extends State<CanvasView> {
     final r = _selScreen;
     if (r == null || ed.tool != Tool.select || ed.selected.every((o) => o.locked)) return null;
     for (final e in _handles(r).entries) {
-      if ((e.value - s).distance <= 9) return e.key;
+      if ((e.value - s).distance <= _hitRadius + 2) return e.key;
     }
     return null;
   }
@@ -147,12 +184,12 @@ class _CanvasViewState extends State<CanvasView> {
       for (var ni = 0; ni < c.nodes.length; ni++) {
         final n = c.nodes[ni];
         if (ed.activeNode == (ci, ni)) {
-          if (n.cIn != null && (vp.toScreen(o.xform.apply(n.cIn!)) - s).distance <= 7) return (_Drag.handleIn, ci, ni);
-          if (n.cOut != null && (vp.toScreen(o.xform.apply(n.cOut!)) - s).distance <= 7) {
+          if (n.cIn != null && (vp.toScreen(o.xform.apply(n.cIn!)) - s).distance <= _hitRadius) return (_Drag.handleIn, ci, ni);
+          if (n.cOut != null && (vp.toScreen(o.xform.apply(n.cOut!)) - s).distance <= _hitRadius) {
             return (_Drag.handleOut, ci, ni);
           }
         }
-        if ((vp.toScreen(o.xform.apply(n.p)) - s).distance <= 7) return (_Drag.node, ci, ni);
+        if ((vp.toScreen(o.xform.apply(n.p)) - s).distance <= _hitRadius) return (_Drag.node, ci, ni);
       }
     }
     return null;
@@ -172,6 +209,10 @@ class _CanvasViewState extends State<CanvasView> {
 
   void _onDown(PointerDownEvent e) {
     focus.requestFocus();
+    pointers[e.pointer] = e.localPosition;
+    _touch = e.kind == PointerDeviceKind.touch || e.kind == PointerDeviceKind.stylus;
+    if (pointers.length >= 2) return _startPinch();
+    if (drag == _Drag.pinch) return;
     final s = e.localPosition;
     final w = vp.toWorld(s);
     startScreen = s;
@@ -187,7 +228,7 @@ class _CanvasViewState extends State<CanvasView> {
     final isDouble = now.difference(lastTap) < const Duration(milliseconds: 350) && (s - lastTapPos).distance < 6;
     lastTap = now;
     lastTapPos = s;
-    final tol = 4 / vp.zoom;
+    final tol = (_touch ? 10 : 4) / vp.zoom;
 
     switch (ed.tool) {
       case Tool.pen:
@@ -263,12 +304,22 @@ class _CanvasViewState extends State<CanvasView> {
   }
 
   void _onMove(PointerMoveEvent e) {
+    pointers[e.pointer] = e.localPosition;
+    if (drag == _Drag.pinch) {
+      if (pointers.length < 2) return;
+      final (c, d) = _pinchState();
+      vp.zoomAt(_pinchCenter, d / _pinchDistance);
+      vp.panBy(c - _pinchCenter);
+      _pinchCenter = c;
+      _pinchDistance = d;
+      return;
+    }
     final s = e.localPosition;
     final w = vp.toWorld(s);
     cursorWorld = w;
     widget.onCursor?.call(w);
     switch (drag) {
-      case _Drag.none:
+      case _Drag.none || _Drag.pinch:
         return;
       case _Drag.pan:
         vp.panBy(e.delta);
@@ -379,6 +430,12 @@ class _CanvasViewState extends State<CanvasView> {
   }
 
   void _onUp(PointerUpEvent e) {
+    pointers.remove(e.pointer);
+    if (drag == _Drag.pinch) {
+      // Wait for every finger to lift before starting anything new.
+      if (pointers.isEmpty) drag = _Drag.none;
+      return;
+    }
     final was = drag;
     drag = _Drag.none;
     handle = null;
@@ -459,7 +516,14 @@ class _CanvasViewState extends State<CanvasView> {
               onPointerDown: _onDown,
               onPointerMove: _onMove,
               onPointerUp: _onUp,
-              onPointerCancel: (_) => setState(() => drag = _Drag.none),
+              onPointerCancel: (e) {
+                pointers.remove(e.pointer);
+                if (drag == _Drag.move || drag == _Drag.scale || drag == _Drag.rotate) {
+                  _restoreStart();
+                  ed.endGesture();
+                }
+                setState(() => drag = _Drag.none);
+              },
               onPointerSignal: _onSignal,
               onPointerPanZoomStart: (_) => _lastScale = 1,
               onPointerPanZoomUpdate: (e) {

@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
 
 import '../platform/platform.dart';
 import 'ttf.dart';
@@ -48,14 +50,33 @@ class FontRegistry extends ChangeNotifier {
   }
 
   String? get defaultFamily {
-    const preferred = ['Helvetica', 'Arial', 'Avenir Next', 'Segoe UI', 'DejaVu Sans', 'Liberation Sans'];
+    const preferred = ['Helvetica', 'Arial', 'Avenir Next', 'Segoe UI', 'DejaVu Sans', 'Liberation Sans', 'Roboto'];
     for (final p in preferred) {
       if (_families.containsKey(p)) return p;
     }
     return families.isEmpty ? null : families.first;
   }
 
+  static const bundled = [
+    'assets/fonts/Roboto-Regular.ttf',
+    'assets/fonts/Roboto-Bold.ttf',
+    'assets/fonts/Roboto-Italic.ttf',
+    'assets/fonts/Roboto-BoldItalic.ttf',
+  ];
+
+  Future<void> _loadBundled() async {
+    for (final path in bundled) {
+      try {
+        final data = await rootBundle.load(path);
+        addLoaded(TrueTypeFont(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes)), path: 'asset:$path');
+      } catch (_) {
+        // Missing from this build; system fonts still work.
+      }
+    }
+  }
+
   Future<void> init() async {
+    await _loadBundled();
     final dirs = [...systemFontDirs()];
     if (hasFileSystem) {
       importDir = '${await appDataDir()}/fonts';
@@ -76,15 +97,28 @@ class FontRegistry extends ChangeNotifier {
     styles.putIfAbsent(r.style, () => r);
   }
 
-  /// Registers fonts from a file the user picked. Returns the family names added.
-  Future<List<String>> importFontFile(String path, String fileName) async {
-    var usePath = path;
-    if (importDir != null) {
-      final store = FileStore(importDir!);
-      await store.copyIn(path, fileName);
-      usePath = store.absolute(fileName);
+  /// Registers fonts from a file the user picked, keeping a copy in the app's
+  /// font folder. Takes bytes because mobile pickers don't always give a path.
+  /// Returns the family names added.
+  Future<List<String>> importFontBytes(Uint8List bytes, String fileName) async {
+    if (importDir == null) {
+      // No file system (web): use the font for this session only.
+      final added = <String>[];
+      for (var i = 0; i < fontFaceCount(bytes); i++) {
+        try {
+          final f = TrueTypeFont(bytes, faceIndex: i);
+          if (f.family.isEmpty) continue;
+          addLoaded(f, path: 'import:$fileName');
+          added.add(f.family);
+        } catch (_) {
+          // Not a usable face.
+        }
+      }
+      return added.toSet().toList();
     }
-    final refs = _scanFiles([usePath]);
+    final store = FileStore(importDir!);
+    await store.writeAtomic(fileName, bytes);
+    final refs = _scanFiles([store.absolute(fileName)]);
     for (final r in refs) {
       _add(r);
     }

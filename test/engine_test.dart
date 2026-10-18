@@ -146,6 +146,13 @@ void main() {
       expect(arched.height, greaterThan(plain.height * 2));
     }, skip: !arial.existsSync());
 
+    test('bundled Roboto parses and lays out on every platform', () {
+      final font = TrueTypeFont(File('assets/fonts/Roboto-Regular.ttf').readAsBytesSync());
+      expect(font.family, 'Roboto');
+      final t = TextObject(id: 't', name: 't', text: 'Cut me', fontFamily: 'Roboto', size: 10);
+      expect(layoutText(t, font), isNotEmpty);
+    });
+
     test('reads faces from a collection', () {
       final bytes = helvetica.readAsBytesSync();
       expect(fontFaceCount(bytes), greaterThan(1));

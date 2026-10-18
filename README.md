@@ -47,9 +47,17 @@ flutter pub get
 flutter run -d macos   # or windows, linux
 ```
 
-Desktop is the main target. iOS and Android build, but on phones you add fonts
-with **Import → Font**, since the app can't read the system fonts there. The web
-build runs, but it keeps projects in memory only.
+| Platform | Status |
+| --- | --- |
+| macOS | Built and run locally; uses installed system fonts |
+| Windows, Linux | Built in CI; use installed system fonts |
+| iOS, iPadOS | Built and run in the simulator, with pinch-zoom and two-finger pan |
+| Android | Debug APK builds; not yet run on a device or emulator |
+| Web | Builds and runs, but keeps projects in memory only |
+
+Every platform includes Roboto, so text works even where the app can't read
+the system fonts (iOS, Android, web). Add more with **Import → Font**. On
+phones the toolbar collapses into a menu and Layers opens as a drawer.
 
 ## Cutting
 

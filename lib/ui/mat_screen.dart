@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart' as fp;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
@@ -19,6 +20,9 @@ import 'widgets.dart';
 
 /// Lays the design out on mats. Users can drag items anywhere, choose the
 /// order mats are cut in, mirror a mat, and export each mat.
+/// Phones and tablets save one file at a time through the share/save sheet.
+bool get isMobile => defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android;
+
 class MatScreen extends StatefulWidget {
   const MatScreen({super.key, required this.ed, required this.images});
   final EditorController ed;
@@ -91,6 +95,15 @@ class _MatScreenState extends State<MatScreen> {
       appBar: AppBar(
         title: const Text('Prepare mats'),
         actions: [
+          if (!wide)
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: 'Mat settings',
+                icon: const Icon(Icons.view_sidebar_outlined),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+          if (!isMobile)
           PopupMenuButton<CutterDriver>(
             enabled: all.isNotEmpty,
             tooltip: 'Export every mat to a folder',
@@ -104,7 +117,7 @@ class _MatScreenState extends State<MatScreen> {
             ],
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Row(children: [Icon(Icons.drive_folder_upload_outlined), SizedBox(width: 6), Text('Export all')]),
+              child: Icon(Icons.drive_folder_upload_outlined),
             ),
           ),
           const SizedBox(width: 12),
@@ -140,9 +153,10 @@ class _MatScreenState extends State<MatScreen> {
         Text('Layout', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: s.matSize.name,
-          decoration: const InputDecoration(labelText: 'Mat size', isDense: true, border: OutlineInputBorder()),
-          items: [for (final m in MatSize.presets) DropdownMenuItem(value: m.name, child: Text(m.name))],
+          decoration: const InputDecoration(labelText: 'Mat size', border: OutlineInputBorder()),
+          items: [for (final m in MatSize.presets) DropdownMenuItem(value: m.name, child: Text(m.name, overflow: TextOverflow.ellipsis))],
           onChanged: (v) {
             s.matSize = MatSize.presets.firstWhere((m) => m.name == v);
             _changed();
@@ -187,8 +201,9 @@ class _MatScreenState extends State<MatScreen> {
         Text('Print then Cut', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: s.printSheet.name,
-          decoration: const InputDecoration(labelText: 'Paper', isDense: true, border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'Paper', border: OutlineInputBorder()),
           items: [
             for (final m in MatSize.presets.where((m) => m.width < 300))
               DropdownMenuItem(value: m.name, child: Text(m.name)),

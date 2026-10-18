@@ -113,10 +113,6 @@ class FileStore {
     if (await d.exists()) await d.delete(recursive: true);
   }
 
-  Future<void> copyIn(String sourcePath, String rel) async {
-    await File(_p(rel)).parent.create(recursive: true);
-    await File(sourcePath).copy(_p(rel));
-  }
 
   String absolute(String rel) => _p(rel);
 }

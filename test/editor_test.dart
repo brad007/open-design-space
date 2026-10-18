@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:open_design_space/state/editor.dart';
 import 'package:open_design_space/storage/project_store.dart';
 import 'package:open_design_space/text/font_registry.dart';
 import 'package:open_design_space/text/ttf.dart';
+import 'package:open_design_space/ui/canvas_view.dart';
 import 'package:open_design_space/ui/editor_screen.dart';
 
 final _arial = File('/System/Library/Fonts/Supplemental/Arial.ttf');
@@ -166,6 +168,47 @@ void main() {
     await tester.pump();
     expect(find.text('Square 1'), findsOneWidget);
     expect(find.text('Weld'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => dir.delete(recursive: true));
+  });
+
+  testWidgets('two-finger pinch zooms the canvas without moving objects', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late Directory dir;
+    late ProjectStore store;
+    await tester.runAsync(() async {
+      dir = await Directory.systemTemp.createTemp('ods-touch');
+      setDataDirForTesting(dir.path);
+      store = await ProjectStore.open();
+    });
+    final p = store.create('Touch');
+    await tester.pumpWidget(MaterialApp(home: EditorScreen(project: p, store: store, fonts: FontRegistry(), isNew: true)));
+    await tester.pump();
+    final state = tester.state(find.byType(EditorScreen)) as dynamic;
+    final EditorController ed = state.ed;
+    ed.addShape(ShapeKind.square);
+    await tester.pump();
+    final before = ed.project.objects.single.xform;
+    final canvas = tester.getCenter(find.byType(CanvasView));
+    final zoom0 = state.vp.zoom as double;
+    // First finger lands on the selected shape, second finger starts a pinch.
+    final a = await tester.startGesture(canvas, pointer: 1, kind: PointerDeviceKind.touch);
+    await tester.pump();
+    final b = await tester.startGesture(canvas + const Offset(60, 0), pointer: 2, kind: PointerDeviceKind.touch);
+    await tester.pump();
+    for (var i = 1; i <= 10; i++) {
+      await a.moveTo(canvas - Offset(6.0 * i, 0));
+      await b.moveTo(canvas + Offset(60 + 6.0 * i, 0));
+      await tester.pump();
+    }
+    await a.up();
+    await b.up();
+    await tester.pump();
+    expect(state.vp.zoom as double, greaterThan(zoom0 * 1.5));
+    expect(ed.project.objects.single.xform.tx, before.tx);
+    expect(ed.project.objects.single.xform.ty, before.ty);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => dir.delete(recursive: true));
   });

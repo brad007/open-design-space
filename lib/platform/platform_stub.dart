@@ -47,7 +47,6 @@ class FileStore {
   Future<void> deleteDir(String rel) async =>
       _memory.removeWhere((k, _) => k.startsWith('${_p(rel)}/'));
 
-  Future<void> copyIn(String sourcePath, String rel) async {}
 
   String absolute(String rel) => _p(rel);
 }

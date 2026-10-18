@@ -29,6 +29,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   String folder = '';
   String query = '';
   bool loading = true;
+  bool searching = false;
 
   ProjectStore get store => widget.store;
 
@@ -140,25 +141,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width > 760;
     final sidebar = _sidebar(context);
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final search = TextField(
+      autofocus: compact,
+      decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search), hintText: 'Search projects', border: OutlineInputBorder()),
+      onChanged: (v) => setState(() => query = v),
+    );
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Projects'),
-        actions: [
-          SizedBox(
-            width: wide ? 280 : 160,
-            child: TextField(
-              decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search), hintText: 'Search projects', border: OutlineInputBorder()),
-              onChanged: (v) => setState(() => query = v),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(tooltip: 'Import project file', icon: const Icon(Icons.file_open_outlined), onPressed: _importProject),
-          IconButton(tooltip: 'About', icon: const Icon(Icons.info_outline), onPressed: () => showAboutApp(context)),
-          const SizedBox(width: 8),
-          FilledButton.icon(onPressed: _new, icon: const Icon(Icons.add), label: const Text('New project')),
-          const SizedBox(width: 12),
-        ],
+        title: compact && searching ? search : const Text('Projects'),
+        actions: compact
+            ? [
+                IconButton(
+                  tooltip: searching ? 'Close search' : 'Search',
+                  icon: Icon(searching ? Icons.close : Icons.search),
+                  onPressed: () => setState(() {
+                    searching = !searching;
+                    if (!searching) query = '';
+                  }),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (v) => v == 'import' ? _importProject() : showAboutApp(context),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'import', child: Text('Import project file')),
+                    PopupMenuItem(value: 'about', child: Text('About')),
+                  ],
+                ),
+              ]
+            : [
+                SizedBox(width: wide ? 280 : 200, child: search),
+                const SizedBox(width: 8),
+                IconButton(tooltip: 'Import project file', icon: const Icon(Icons.file_open_outlined), onPressed: _importProject),
+                IconButton(tooltip: 'About', icon: const Icon(Icons.info_outline), onPressed: () => showAboutApp(context)),
+                const SizedBox(width: 8),
+                FilledButton.icon(onPressed: _new, icon: const Icon(Icons.add), label: const Text('New project')),
+                const SizedBox(width: 12),
+              ],
       ),
+      floatingActionButton: compact ? FloatingActionButton.extended(onPressed: _new, icon: const Icon(Icons.add), label: const Text('New')) : null,
       drawer: wide ? null : Drawer(child: SafeArea(child: sidebar)),
       body: Row(children: [
         if (wide) ...[SizedBox(width: 220, child: sidebar), const VerticalDivider(width: 1)],
@@ -247,8 +267,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     }
     return GridView.builder(
-      padding: const EdgeInsets.all(24),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 260, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.92),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 12 : 24),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: MediaQuery.sizeOf(context).width < 600 ? 200 : 260, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.92),
       itemCount: items.length,
       itemBuilder: (context, i) => _card(context, items[i]),
     );
