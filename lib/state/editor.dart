@@ -6,6 +6,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../geometry/background_removal.dart';
 import '../geometry/boolean_ops.dart' as bool_ops;
 import '../geometry/node_ops.dart';
 import '../geometry/shapes.dart';
@@ -98,7 +99,15 @@ class EditorController extends ChangeNotifier {
   bool refreshAllText() {
     var changed = false;
     for (final o in project.objects) {
-      if (o is TextObject) changed |= text.refresh(o);
+      if (o is! TextObject) continue;
+      TextPath? path;
+      if (o.pathId != null) {
+        final p = project.byId(o.pathId!);
+        path = p is PathObject ? TextPath.of(p) : null;
+        // The shape is gone (or can't carry text): the text stands on its own.
+        if (path == null) o.pathId = null;
+      }
+      changed |= text.refresh(o, path: path);
     }
     return changed;
   }
@@ -432,12 +441,18 @@ class EditorController extends ChangeNotifier {
 
   List<DesignObject> _cloneAll(Iterable<DesignObject> objs, Offset shift) {
     final groupMap = <String, String>{};
-    return [
+    final idMap = <String, String>{};
+    final copies = [
       for (final o in objs)
-        o.clone(id: newId())
+        o.clone(id: idMap[o.id] = newId())
           ..xform = o.xform.translated(shift)
           ..groupId = o.groupId == null ? null : (groupMap[o.groupId!] ??= newId()),
     ];
+    // Text copied with its path follows the copy of the path.
+    for (final c in copies) {
+      if (c is TextObject && idMap.containsKey(c.pathId)) c.pathId = idMap[c.pathId];
+    }
+    return copies;
   }
 
   void duplicate() {
@@ -674,6 +689,46 @@ class EditorController extends ChangeNotifier {
 
   void editText(TextObject t, void Function(TextObject t) f) => mutate(() => f(t));
 
+  /// The selection when it is exactly one text and one shape.
+  (TextObject, PathObject)? get textAndPath {
+    final sel = selected;
+    if (sel.length != 2) return null;
+    final t = sel.whereType<TextObject>().firstOrNull;
+    final p = sel.whereType<PathObject>().firstOrNull;
+    return t == null || p == null ? null : (t, p);
+  }
+
+  /// Lays the selected text along the selected shape's outline, centered at
+  /// the top of a closed shape or the middle of an open one.
+  void putTextOnPath() {
+    final pair = textAndPath;
+    if (pair == null) return _say('Select one text and one shape.');
+    final (t, p) = pair;
+    final path = TextPath.of(p);
+    if (path == null) return _say('That shape has no outline to follow.');
+    mutate(() {
+      // Grouped so the mat keeps the text on its shape.
+      final g = p.groupId ?? t.groupId ?? newId();
+      p.groupId = g;
+      t
+        ..groupId = g
+        ..pathId = p.id
+        ..pathStart = path.closed ? path.topFraction : 0.5
+        ..pathOffset = 0
+        ..pathFlip = false
+        ..align = TextAlign2.center;
+      selection
+        ..clear()
+        ..add(t.id);
+    }, message: 'The text follows "${p.name}". Move or reshape it and the text comes along.');
+  }
+
+  void releaseTextFromPath(TextObject t) => mutate(() {
+        t
+          ..pathId = null
+          ..curve = 0;
+      }, message: 'Text released from its path');
+
   void toggleVisible(DesignObject o) => mutate(() => o.visible = !o.visible);
 
   void toggleLocked(DesignObject o) => mutate(() {
@@ -856,15 +911,10 @@ class EditorController extends ChangeNotifier {
   }) async {
     final img = single;
     if (img is! ImageObject) return _say('Select one image to trace.');
-    final asset = project.assets[img.assetId];
-    if (asset == null) return;
-    final codec = await ui.instantiateImageCodec(Uint8List.fromList(asset.bytes), targetWidth: 900);
-    final frame = await codec.getNextFrame();
-    final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    final w = frame.image.width, h = frame.image.height;
-    frame.image.dispose();
-    if (data == null) return;
-    final loops = traceImage(data.buffer.asUint8List(), w, h, mode: mode, threshold: threshold, simplify: 0.9);
+    final decoded = await _decodeAsset(img.assetId, targetWidth: 900);
+    if (decoded == null) return;
+    final (pixels, w, h) = decoded;
+    final loops = traceImage(pixels, w, h, mode: mode, threshold: threshold, simplify: 0.9);
     final sx = img.width / w, sy = img.height / h;
     var local = [
       for (final l in loops) [for (final p in l) Offset(p.dx * sx - img.width / 2, p.dy * sy - img.height / 2)],
@@ -896,6 +946,61 @@ class EditorController extends ChangeNotifier {
           ..add(p.id);
       }
     }, message: asCutLine ? 'Cut line set: the image will print and cut along its outline' : 'Traced into a new shape');
+  }
+
+  /// An asset's pixels as premultiplied RGBA, optionally scaled to [targetWidth].
+  Future<(Uint8List, int, int)?> _decodeAsset(String assetId, {int? targetWidth}) async {
+    final asset = project.assets[assetId];
+    if (asset == null) return null;
+    final codec = await ui.instantiateImageCodec(Uint8List.fromList(asset.bytes), targetWidth: targetWidth);
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final w = frame.image.width, h = frame.image.height;
+    frame.image.dispose();
+    codec.dispose();
+    if (data == null) return null;
+    return (data.buffer.asUint8List(), w, h);
+  }
+
+  /// Makes the selected image's background transparent: pixels near [color]
+  /// (0xAARRGGBB, or the corner colour when null) that reach the edge. The
+  /// result is a new PNG asset, so undo returns to the original picture.
+  Future<void> removeImageBackground({int? color, double tolerance = 0.15}) async {
+    final img = single;
+    if (img is! ImageObject) return _say('Select one image to remove its background.');
+    final decoded = await _decodeAsset(img.assetId);
+    if (decoded == null) return _say('This image could not be read.');
+    final (pixels, w, h) = decoded;
+    final key = color == null
+        ? null
+        // Picked colours are opaque; compare in the decoded image's terms.
+        : 0xFF000000 | (color & 0xFFFFFF);
+    final cleared = removeBackground(pixels, w, h, key: key, tolerance: tolerance);
+    var changed = false;
+    for (var i = 3; i < cleared.length && !changed; i += 4) {
+      changed = cleared[i] != pixels[i];
+    }
+    if (!changed) return _say('No background found at this tolerance. Try a higher tolerance or pick the colour.');
+    final png = await _encodePng(cleared, w, h);
+    if (png == null) return _say('Could not save the edited image.');
+    final assetId = newId();
+    mutate(() {
+      project.assets[assetId] = Asset('image/png', png);
+      img.assetId = assetId;
+    }, message: 'Background removed (undo to restore it). Trace the outline to cut around the artwork.');
+  }
+
+  static Future<Uint8List?> _encodePng(Uint8List rgba, int w, int h) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
+    final descriptor = ui.ImageDescriptor.raw(buffer, width: w, height: h, pixelFormat: ui.PixelFormat.rgba8888);
+    final codec = await descriptor.instantiateCodec();
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+    frame.image.dispose();
+    codec.dispose();
+    descriptor.dispose();
+    buffer.dispose();
+    return data?.buffer.asUint8List();
   }
 
   void clearCutOutline() {
