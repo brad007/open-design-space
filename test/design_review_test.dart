@@ -23,6 +23,7 @@ import 'package:open_design_space/ui/image_cache.dart';
 import 'package:open_design_space/ui/library_screen.dart';
 import 'package:open_design_space/ui/mat_screen.dart';
 import 'package:open_design_space/ui/theme.dart';
+import 'package:open_design_space/ui/ui_scale.dart';
 
 const enabled = bool.fromEnvironment('SCREENSHOTS');
 const outDir = String.fromEnvironment('SHOT_DIR', defaultValue: 'build/design_review');
@@ -91,7 +92,7 @@ void main() {
       await store.save(store.create('Gift tags')..objects.add(PathObject(id: 'tag', name: 'Tag', contours: buildShape(ShapeKind.polygon), color: 0xFF30A46C)));
     });
 
-    Future<void> show(Widget home, Size size, Brightness b, {bool settle = true}) async {
+    Future<void> show(Widget home, Size size, Brightness b, {bool settle = true, double scale = 1}) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       await tester.pumpWidget(RepaintBoundary(
@@ -101,6 +102,7 @@ void main() {
           theme: appTheme(Brightness.light, fontFamily: 'Roboto'),
           darkTheme: appTheme(Brightness.dark, fontFamily: 'Roboto'),
           themeMode: b == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+          builder: (context, child) => UiScaleHost.wrap(UiScale(scale), child),
           home: KeyedSubtree(key: UniqueKey(), child: home),
         ),
       ));
@@ -137,6 +139,30 @@ void main() {
         await tester.pumpAndSettle();
         await capture(tester, '$tag-6-library');
       }
+
+      // The largest interface size, for people who need bigger text and icons.
+      const big = 1.5;
+      final tag = '$device-light-150';
+      final design = sampleDesign(store, fonts);
+      await show(EditorScreen(project: design, store: store, fonts: fonts), size, Brightness.light, scale: big);
+      await capture(tester, '$tag-2-editor-design');
+      final ed = (tester.state(find.byType(EditorScreen)) as dynamic).ed as EditorController;
+      ed.select(['title']);
+      await tester.pumpAndSettle();
+      await capture(tester, '$tag-3-editor-text');
+      ed.select(['heart']);
+      await tester.pumpAndSettle();
+      await capture(tester, '$tag-4-editor-shape');
+      final matEd = EditorController(project: design, store: store, fonts: fonts);
+      await show(MatScreen(ed: matEd, images: AssetImages(design)), size, Brightness.light, scale: big);
+      await capture(tester, '$tag-5-mats');
+      await show(LibraryScreen(store: store, fonts: fonts), size, Brightness.light, settle: false, scale: big);
+      for (var i = 0; i < 40 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      await capture(tester, '$tag-6-library');
     }
     await tester.pumpWidget(const SizedBox());
     tester.view.reset();

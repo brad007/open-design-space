@@ -6,6 +6,7 @@ import '../model/objects.dart';
 import '../model/project.dart';
 import '../state/editor.dart';
 import 'dialogs.dart';
+import 'ui_scale.dart';
 import 'widgets.dart';
 
 final _recentFonts = <String>[];
@@ -24,11 +25,13 @@ class EditBar extends StatelessWidget {
   final FocusNode textFocus;
   final TextEditingController textController;
 
+  /// At 100% interface size; rows grow with it so nothing clips.
   static const rowHeight = 40.0;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final rowHeight = scaled(context, EditBar.rowHeight);
     return Material(
       color: scheme.surface,
       child: Padding(
@@ -71,7 +74,7 @@ class EditBar extends StatelessWidget {
           const SizedBox(width: 16),
           const Text('Brush'),
           SizedBox(
-            width: 160,
+            width: scaled(context, 160),
             child: Slider(
               value: ed.eraserWidth,
               min: 0.5,
@@ -102,7 +105,7 @@ class EditBar extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 150,
+          width: scaled(context, 150),
           child: DropdownButton<Operation>(
             isExpanded: true,
             value: sameOp ? first!.operation : null,
@@ -294,7 +297,7 @@ class EditBar extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 200,
+          width: scaled(context, 200),
           child: TextField(
             controller: textController,
             focusNode: textFocus,
@@ -318,7 +321,7 @@ class EditBar extends StatelessWidget {
               ? const Icon(Icons.warning_amber, color: Colors.orange, size: 18)
               : const Icon(Icons.font_download_outlined, size: 18),
           label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
+            constraints: BoxConstraints(maxWidth: scaled(context, 140)),
             child: Text(t.fontFamily, overflow: TextOverflow.ellipsis),
           ),
           onPressed: () async {
@@ -373,7 +376,7 @@ class EditBar extends StatelessWidget {
         const SizedBox(width: 8),
         const Text('Curve'),
         SizedBox(
-          width: 130,
+          width: scaled(context, 130),
           child: Slider(
             value: t.curve.clamp(-360, 360),
             min: -360,

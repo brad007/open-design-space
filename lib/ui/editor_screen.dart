@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,6 +21,7 @@ import 'layers_panel.dart';
 import 'library_screen.dart';
 import 'mat_screen.dart';
 import 'render.dart';
+import 'ui_scale.dart';
 import 'widgets.dart';
 
 class EditorScreen extends StatefulWidget {
@@ -44,6 +46,8 @@ class _EditorScreenState extends State<EditorScreen> {
   final screenFocus = FocusNode(debugLabel: 'editor');
   bool showLayers = true;
   final cursor = ValueNotifier<Offset?>(null);
+  Widget? _layers;
+  List<Object?> _layersInputs = const [];
 
   @override
   void initState() {
@@ -112,8 +116,9 @@ class _EditorScreenState extends State<EditorScreen> {
       return true;
     }
 
-    final step = shift ? 10.0 : 1.0;
-    final unit = ed.project.units == Units.inch ? 25.4 / 16 : 1.0;
+    final inch = ed.project.units == Units.inch;
+    // Alt gives a fine step for lining up text: 0.1 mm or 1/100 in.
+    final nudge = k.isAltPressed ? (inch ? 25.4 / 100 : 0.1) : (shift ? 10.0 : 1.0) * (inch ? 25.4 / 16 : 1.0);
     final handled = switch (key) {
       LogicalKeyboardKey.keyZ when cmd && shift => run(ed.redo),
       LogicalKeyboardKey.keyZ when cmd => run(ed.undo),
@@ -144,10 +149,10 @@ class _EditorScreenState extends State<EditorScreen> {
           ed.clearSelection();
         }
       }),
-      LogicalKeyboardKey.arrowLeft => run(() => ed.nudge(Offset(-step * unit, 0))),
-      LogicalKeyboardKey.arrowRight => run(() => ed.nudge(Offset(step * unit, 0))),
-      LogicalKeyboardKey.arrowUp => run(() => ed.nudge(Offset(0, -step * unit))),
-      LogicalKeyboardKey.arrowDown => run(() => ed.nudge(Offset(0, step * unit))),
+      LogicalKeyboardKey.arrowLeft => run(() => ed.nudge(Offset(-nudge, 0))),
+      LogicalKeyboardKey.arrowRight => run(() => ed.nudge(Offset(nudge, 0))),
+      LogicalKeyboardKey.arrowUp => run(() => ed.nudge(Offset(0, -nudge))),
+      LogicalKeyboardKey.arrowDown => run(() => ed.nudge(Offset(0, nudge))),
       LogicalKeyboardKey.keyV when !cmd => run(() => ed.setTool(Tool.select)),
       LogicalKeyboardKey.keyN when !cmd => run(() => ed.setTool(Tool.node)),
       LogicalKeyboardKey.keyP when !cmd => run(() => ed.setTool(Tool.pen)),
@@ -332,7 +337,7 @@ class _EditorScreenState extends State<EditorScreen> {
                         ],
                       ),
                     ),
-                    if (showLayers && wide) ...[const VerticalDivider(width: 1), SizedBox(width: 260, child: LayersPanel(ed: ed))],
+                    if (showLayers && wide) ...[const VerticalDivider(width: 1), SizedBox(width: scaled(context, 260), child: _layersPanel())],
                   ],
                 ),
               ),
@@ -344,10 +349,24 @@ class _EditorScreenState extends State<EditorScreen> {
         endDrawer: wide
             ? null
             : Drawer(
-                child: SafeArea(child: LayersPanel(ed: ed)),
+                child: SafeArea(child: _layersPanel()),
               ),
       ),
     );
+  }
+
+  /// The same panel widget while nothing it shows has changed, so Flutter
+  /// skips rebuilding hundreds of rows on every frame of a drag.
+  Widget _layersPanel() {
+    final inputs = <Object?>[
+      ...ed.selection,
+      for (final o in ed.project.objects) (o.id, o.name, o.color, o.operation, o.visible, o.locked, o.groupId),
+    ];
+    if (_layers == null || !listEquals(inputs, _layersInputs)) {
+      _layers = LayersPanel(ed: ed);
+      _layersInputs = inputs;
+    }
+    return _layers!;
   }
 
   void _viewAction(String v) {
@@ -367,18 +386,25 @@ class _EditorScreenState extends State<EditorScreen> {
         showRestorePoints(context, ed);
       case 'shortcuts':
         showShortcuts(context);
+      case 'uiSize':
+        final scale = UiScaleHost.of(context);
+        if (scale != null) showInterfaceSize(context, scale);
       case 'svg' || 'pdf' || 'png' || 'odsx':
         _export(v);
     }
     setState(() {});
   }
 
-  List<PopupMenuEntry<String>> _viewItems({required bool includeLayers}) => [
-    CheckedPopupMenuItem(value: 'grid', checked: ed.showGrid, child: const Text('Grid')),
-    CheckedPopupMenuItem(value: 'snap', checked: ed.snapping, child: const Text('Snap to objects and mat')),
-    if (includeLayers) CheckedPopupMenuItem(value: 'layers', checked: showLayers, child: const Text('Layers panel')),
-    PopupMenuItem(value: 'units', child: Text(ed.project.units == Units.inch ? 'Use millimetres' : 'Use inches')),
-  ];
+  List<PopupMenuEntry<String>> _viewItems({required bool includeLayers}) {
+    final scale = UiScaleHost.of(context);
+    return [
+      CheckedPopupMenuItem(value: 'grid', checked: ed.showGrid, child: const Text('Grid')),
+      CheckedPopupMenuItem(value: 'snap', checked: ed.snapping, child: const Text('Snap to objects and mat')),
+      if (includeLayers) CheckedPopupMenuItem(value: 'layers', checked: showLayers, child: const Text('Layers panel')),
+      PopupMenuItem(value: 'units', child: Text(ed.project.units == Units.inch ? 'Use millimetres' : 'Use inches')),
+      if (scale != null) PopupMenuItem(value: 'uiSize', child: Text('Interface size (${UiScale.label(scale.value)})…')),
+    ];
+  }
 
   static const _exportItems = [
     PopupMenuItem(
@@ -511,7 +537,7 @@ class _EditorScreenState extends State<EditorScreen> {
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: SizedBox(
-        width: 68,
+        width: scaled(context, 68),
         height: double.infinity,
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -547,7 +573,7 @@ class _EditorScreenState extends State<EditorScreen> {
     return Material(
       color: scheme.surface,
       child: SizedBox(
-        height: 60,
+        height: scaled(context, 60),
         child: Row(
           children: [
             Expanded(
@@ -601,7 +627,7 @@ class _EditorScreenState extends State<EditorScreen> {
     final u = ed.project.units;
     final style = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
     return Container(
-      height: 28,
+      height: scaled(context, 28),
       color: scheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(

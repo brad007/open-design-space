@@ -549,6 +549,7 @@ class _CanvasViewState extends State<CanvasView> {
                     cursor: cursorWorld,
                     guides: guides,
                     labelStyle: Theme.of(context).textTheme.labelSmall ?? const TextStyle(),
+                    textScaler: MediaQuery.textScalerOf(context),
                   ),
                 ),
               ),
@@ -573,9 +574,11 @@ class _CanvasPainter extends CustomPainter {
     required this.cursor,
     required this.guides,
     required this.labelStyle,
+    required this.textScaler,
   });
 
   final TextStyle labelStyle;
+  final TextScaler textScaler;
   final EditorController ed;
   final CanvasViewport vp;
   final AssetImages images;
@@ -661,9 +664,15 @@ class _CanvasPainter extends CustomPainter {
 
     // Outline each selected object, then the selection box and handles.
     for (final o in ed.selected) {
-      final p = contoursToPath(o.localContours, map: (q) => vp.toScreen(o.xform.apply(q)));
+      // The cached outline moved to the screen, so the line stays 1 px wide.
+      final m = o.xform.toMatrix4();
+      for (final i in const [0, 1, 4, 5, 12, 13]) {
+        m[i] *= vp.zoom;
+      }
+      m[12] += vp.pan.dx;
+      m[13] += vp.pan.dy;
       canvas.drawPath(
-        p,
+        objectPath(o).transform(m),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
@@ -754,6 +763,7 @@ class _CanvasPainter extends CustomPainter {
         style: labelStyle.copyWith(fontSize: 11, color: scheme.onPrimary),
       ),
       textDirection: TextDirection.ltr,
+      textScaler: textScaler,
     )..layout();
     final at = screen.bottomCenter + Offset(-tp.width / 2 - 6, 10);
     canvas.drawRRect(

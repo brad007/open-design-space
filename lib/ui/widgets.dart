@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'ui_scale.dart';
+
 /// Formats [v] with up to [decimals] places, dropping trailing zeros after the
 /// decimal point only (70 stays "70", 1.50 becomes "1.5").
 String formatNumber(double v, int decimals) {
@@ -73,7 +75,7 @@ class _NumberFieldState extends State<NumberField> {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: widget.width,
+        width: scaled(context, widget.width),
         child: TextField(
           controller: c,
           focusNode: focus,
@@ -121,7 +123,7 @@ class BarDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: 1,
-        height: 26,
+        height: scaled(context, 26),
         margin: const EdgeInsets.symmetric(horizontal: 6),
         color: Theme.of(context).dividerColor,
       );
@@ -133,8 +135,8 @@ class ColorDot extends StatelessWidget {
   final double size;
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
+        width: scaled(context, size),
+        height: scaled(context, size),
         decoration: BoxDecoration(
           color: Color(color),
           shape: BoxShape.circle,
@@ -164,9 +166,9 @@ class RailButton extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          width: 48,
-          height: 30,
-          decoration: BoxDecoration(color: selected ? scheme.primaryContainer : Colors.transparent, borderRadius: BorderRadius.circular(15)),
+          width: scaled(context, 48),
+          height: scaled(context, 30),
+          decoration: BoxDecoration(color: selected ? scheme.primaryContainer : Colors.transparent, borderRadius: BorderRadius.circular(scaled(context, 15))),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(icon, size: 20, color: fg),
             if (dropdown) Icon(Icons.arrow_drop_down, size: 14, color: fg),

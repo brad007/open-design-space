@@ -77,13 +77,13 @@ offline-mode article when fetched directly (403; its search summary is used).
 | Offline mode can't upload or use templates; none on Android | Fully offline everywhere, imports included |
 | Cut width capped at 11.5" on a 12" mat | Edge margin is a setting |
 | No batch upload | Import accepts many files at once |
-| Icons and text too small, no way to enlarge them | **Gap: no interface size setting** |
-| Nudge steps too coarse for lining up text | Arrow keys move 1/16 in (Shift: 10×); **no finer step** |
+| Icons and text too small, no way to enlarge them | View > Interface size, 90% to 150%, saved on the device |
+| Nudge steps too coarse for lining up text | Arrow keys move 1 mm or 1/16 in (Shift: 10×); Alt + arrow moves 0.1 mm or 1/100 in |
 | Paywall on your own uploads; constant upsells; two subscriptions | Free, no store, no upsells |
 | Login fails on managed corporate networks | No login, no network |
 | Outages for days | Doesn't depend on a server |
 | Print dialog hidden behind the app | Uses the system print dialog; **not yet tested on Windows** |
-| Very slow on iPad Pro | **Not yet measured with large designs on iPad** |
+| Very slow on iPad Pro | `test/perf_test.dart` times 300 shapes plus curved text; outlines and bounds are now cached, so dragging is about twice as fast. **Not yet measured on a real iPad** |
 | No text on a curved path | Curved text works; **text along any path doesn't** |
 | Not precise enough for exact parts | Millimetre or inch fields to 0.01; geometry runs at 0.05 mm |
 | Has to use the maker's software to cut | **Still true for Cricut machines**: exports SVG/DXF/HPGL only |
