@@ -126,13 +126,21 @@ void main() {
         ed.select(['heart']);
         await tester.pumpAndSettle();
         await capture(tester, '$tag-4-editor-shape');
+        // Text along a path: the title follows the heart's outline.
+        ed.select(['title', 'heart'], expandGroups: false);
+        ed.putTextOnPath();
+        ed.select(['title']);
+        await tester.pumpAndSettle();
+        await capture(tester, '$tag-4b-editor-text-on-path');
+        ed.undo();
+        await tester.pumpAndSettle();
 
         final matEd = EditorController(project: design, store: store, fonts: fonts);
         await show(MatScreen(ed: matEd, images: AssetImages(design)), size, b);
         await capture(tester, '$tag-5-mats');
 
         await show(LibraryScreen(store: store, fonts: fonts), size, b, settle: false);
-        for (var i = 0; i < 40 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
+        for (var i = 0; i < 400 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
           await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
           await tester.pump();
         }
@@ -157,7 +165,7 @@ void main() {
       await show(MatScreen(ed: matEd, images: AssetImages(design)), size, Brightness.light, scale: big);
       await capture(tester, '$tag-5-mats');
       await show(LibraryScreen(store: store, fonts: fonts), size, Brightness.light, settle: false, scale: big);
-      for (var i = 0; i < 40 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
+      for (var i = 0; i < 400 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
         await tester.pump();
       }
