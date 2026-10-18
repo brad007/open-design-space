@@ -1,3 +1,5 @@
+<img src="docs/screenshots/icon.png" alt="" width="96" align="right">
+
 # Open Design Space
 
 An open-source, offline-first design app for cutting machines, written in
@@ -48,6 +50,10 @@ feature.
 | Mats | Projects |
 | --- | --- |
 | ![Mats](docs/screenshots/mats.png) | ![Projects](docs/screenshots/library.png) |
+
+| Phone | Dark mode |
+| --- | --- |
+| <img src="docs/screenshots/editor-phone.png" alt="Editor on a phone" width="260"> | ![Dark mode](docs/screenshots/editor-dark.png) |
 
 ## Build from source
 
@@ -100,8 +106,14 @@ lib/
 test/         engine, editor and widget tests
 ```
 
-Run the tests with `flutter test`. To regenerate the screenshots, run
-`flutter test test/screenshots_test.dart --dart-define=SCREENSHOTS=true`.
+Run the tests with `flutter test`. Two opt-in tests produce images:
+
+- `flutter test test/design_review_test.dart --dart-define=SCREENSHOTS=true`
+  renders every screen at desktop, tablet and phone sizes, in light and dark,
+  into `build/design_review/`.
+- `flutter test test/app_icon_test.dart --dart-define=ICON=true` redraws the
+  icon sources in `assets/icon/`; then `dart run flutter_launcher_icons`
+  updates every platform's icons.
 
 ## Clean-room note
 

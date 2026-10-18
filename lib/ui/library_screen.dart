@@ -149,7 +149,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
     return Scaffold(
       appBar: AppBar(
-        title: compact && searching ? search : const Text('Projects'),
+        title: compact && searching
+            ? search
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Image.asset('assets/branding/app_icon.png', width: 30, height: 30, errorBuilder: (_, _, _) => const SizedBox()),
+                ),
+                const SizedBox(width: 10),
+                const Flexible(child: Text('Projects', overflow: TextOverflow.ellipsis)),
+              ]),
         actions: compact
             ? [
                 IconButton(
@@ -286,13 +295,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
         onTap: inTrash ? null : () => _openId(m.id),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Expanded(
-            child: Container(
-              color: scheme.surfaceContainerLow,
-              padding: const EdgeInsets.all(8),
-              child: thumb == null
-                  ? Icon(Icons.draw_outlined, size: 40, color: scheme.outline)
-                  : Image.memory(thumb, fit: BoxFit.contain, gaplessPlayback: true),
-            ),
+            child: Stack(children: [
+              Positioned.fill(
+                child: Container(
+                  color: scheme.surfaceContainerLow,
+                  padding: const EdgeInsets.all(8),
+                  child: thumb == null
+                      ? Icon(Icons.draw_outlined, size: 40, color: scheme.outline)
+                      : Image.memory(thumb, fit: BoxFit.contain, gaplessPlayback: true),
+                ),
+              ),
+              if (!inTrash)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    style: IconButton.styleFrom(backgroundColor: scheme.surface.withValues(alpha: 0.85)),
+                    tooltip: m.favorite ? 'Unfavorite' : 'Favorite',
+                    icon: Icon(m.favorite ? Icons.star : Icons.star_outline, size: 20, color: m.favorite ? Colors.amber.shade700 : scheme.onSurfaceVariant),
+                    onPressed: () => _action('favorite', m),
+                  ),
+                ),
+            ]),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
@@ -311,13 +336,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
                 ]),
               ),
-              if (!inTrash)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: m.favorite ? 'Unfavorite' : 'Favorite',
-                  icon: Icon(m.favorite ? Icons.star : Icons.star_outline, size: 20, color: m.favorite ? Colors.amber.shade700 : null),
-                  onPressed: () => _action('favorite', m),
-                ),
               PopupMenuButton<String>(
                 onSelected: (a) => _action(a, m),
                 itemBuilder: (_) => inTrash

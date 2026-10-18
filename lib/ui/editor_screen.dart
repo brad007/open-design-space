@@ -67,8 +67,7 @@ class _EditorScreenState extends State<EditorScreen> {
   void dispose() {
     ed.removeListener(_onChange);
     widget.fonts.removeListener(_onChange);
-    if (ed.dirty) ed.save();
-    ed.dispose();
+    ed.closeAndDispose();
     images.dispose();
     textFocus.dispose();
     textController.dispose();
@@ -135,15 +134,16 @@ class _EditorScreenState extends State<EditorScreen> {
       LogicalKeyboardKey.digit0 when cmd => run(_fit),
       LogicalKeyboardKey.equal when cmd => run(() => vp.zoomAt(vp.size.center(Offset.zero), 1.25)),
       LogicalKeyboardKey.minus when cmd => run(() => vp.zoomAt(vp.size.center(Offset.zero), 0.8)),
-      LogicalKeyboardKey.delete || LogicalKeyboardKey.backspace =>
-        run(() => ed.tool == Tool.node && ed.activeNode != null ? ed.deleteActiveNode() : ed.deleteSelected()),
+      LogicalKeyboardKey.delete || LogicalKeyboardKey.backspace => run(
+        () => ed.tool == Tool.node && ed.activeNode != null ? ed.deleteActiveNode() : ed.deleteSelected(),
+      ),
       LogicalKeyboardKey.escape => run(() {
-          if (ed.tool != Tool.select) {
-            ed.setTool(Tool.select);
-          } else {
-            ed.clearSelection();
-          }
-        }),
+        if (ed.tool != Tool.select) {
+          ed.setTool(Tool.select);
+        } else {
+          ed.clearSelection();
+        }
+      }),
       LogicalKeyboardKey.arrowLeft => run(() => ed.nudge(Offset(-step * unit, 0))),
       LogicalKeyboardKey.arrowRight => run(() => ed.nudge(Offset(step * unit, 0))),
       LogicalKeyboardKey.arrowUp => run(() => ed.nudge(Offset(0, -step * unit))),
@@ -161,7 +161,11 @@ class _EditorScreenState extends State<EditorScreen> {
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
-  void _fit() => vp.fit(ed.project.objects.any((o) => o.visible) ? ed.contentBounds() : Rect.fromLTWH(0, 0, ed.project.mat.matSize.width, ed.project.mat.matSize.height));
+  void _fit() => vp.fit(
+    ed.project.objects.any((o) => o.visible)
+        ? ed.contentBounds()
+        : Rect.fromLTWH(0, 0, ed.project.mat.matSize.width, ed.project.mat.matSize.height),
+  );
 
   void _addText() {
     ed.addText();
@@ -225,7 +229,11 @@ class _EditorScreenState extends State<EditorScreen> {
   Future<void> _makeIt() async {
     await ed.save();
     if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MatScreen(ed: ed, images: images)));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MatScreen(ed: ed, images: images),
+      ),
+    );
     setState(() {});
   }
 
@@ -233,7 +241,9 @@ class _EditorScreenState extends State<EditorScreen> {
     await ed.save();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => LibraryScreen(store: widget.store, fonts: widget.fonts)),
+      MaterialPageRoute(
+        builder: (_) => LibraryScreen(store: widget.store, fonts: widget.fonts),
+      ),
       (_) => false,
     );
   }
@@ -251,7 +261,8 @@ class _EditorScreenState extends State<EditorScreen> {
     final scheme = Theme.of(context).colorScheme;
     final width = MediaQuery.sizeOf(context).width;
     final wide = width > 900;
-    final compact = width < 760;
+    final compact = width < 900;
+    final phone = width < 600;
     return Focus(
       focusNode: screenFocus,
       autofocus: true,
@@ -260,69 +271,81 @@ class _EditorScreenState extends State<EditorScreen> {
         appBar: AppBar(
           titleSpacing: 0,
           leading: IconButton(tooltip: 'Projects', icon: const Icon(Icons.grid_view_rounded), onPressed: _openLibrary),
-          title: Row(children: [
-            Flexible(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () async {
-                  final n = await promptText(context, title: 'Project name', initial: ed.project.meta.name, action: 'Rename');
-                  if (n != null && n.trim().isNotEmpty) {
-                    ed.project.meta.name = n.trim();
-                    ed.settingsChanged();
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Text(ed.project.meta.name, overflow: TextOverflow.ellipsis),
+          title: Row(
+            children: [
+              Flexible(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () async {
+                    final n = await promptText(context, title: 'Project name', initial: ed.project.meta.name, action: 'Rename');
+                    if (n != null && n.trim().isNotEmpty) {
+                      ed.project.meta.name = n.trim();
+                      ed.settingsChanged();
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Text(ed.project.meta.name, overflow: TextOverflow.ellipsis),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            if (compact)
-              Tooltip(
-                message: _saveLabel,
-                child: Icon(ed.dirty || ed.saving ? Icons.cloud_sync_outlined : Icons.cloud_done_outlined, size: 18, color: scheme.onSurfaceVariant),
-              )
-            else
-              Text(_saveLabel, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          ]),
-          actions: compact ? _compactActions(context) : _wideActions(context),
+              const SizedBox(width: 8),
+              if (compact)
+                Tooltip(
+                  message: _saveLabel,
+                  child: Icon(
+                    ed.dirty || ed.saving ? Icons.cloud_sync_outlined : Icons.cloud_done_outlined,
+                    size: 18,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Text(_saveLabel, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+          actions: compact ? _compactActions(context, phone: phone) : _wideActions(context),
         ),
         body: SafeArea(
           top: false,
-          child: Column(children: [
-          EditBar(ed: ed, lockRatio: lockRatio, textFocus: textFocus, textController: textController),
-          const Divider(height: 1),
-          Expanded(
-            child: Row(children: [
-              _toolRail(context),
-              const VerticalDivider(width: 1),
+          child: Column(
+            children: [
+              EditBar(ed: ed, lockRatio: lockRatio, textFocus: textFocus, textController: textController),
+              const Divider(height: 1),
               Expanded(
-                child: Stack(children: [
-                  Positioned.fill(
-                    child: CanvasView(
-                      editor: ed,
-                      images: images,
-                      viewport: vp,
-                      lockRatio: lockRatio,
-                      onEditText: _editText,
-                      onCursor: (w) => cursor.value = w,
+                child: Row(
+                  children: [
+                    if (!phone) ...[_toolRail(context), const VerticalDivider(width: 1)],
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CanvasView(
+                              editor: ed,
+                              images: images,
+                              viewport: vp,
+                              lockRatio: lockRatio,
+                              onEditText: _editText,
+                              onCursor: (w) => cursor.value = w,
+                            ),
+                          ),
+                          if (ed.project.objects.isEmpty) _EmptyHint(phone: phone),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (ed.project.objects.isEmpty) const _EmptyHint(),
-                ]),
+                    if (showLayers && wide) ...[const VerticalDivider(width: 1), SizedBox(width: 260, child: LayersPanel(ed: ed))],
+                  ],
+                ),
               ),
-              if (showLayers && wide) ...[
-                const VerticalDivider(width: 1),
-                SizedBox(width: 260, child: LayersPanel(ed: ed)),
-              ],
-            ]),
+              if (!phone || ed.status != null) ...[const Divider(height: 1), _statusBar(context, phone: phone)],
+              if (phone) ...[const Divider(height: 1), _bottomBar(context)],
+            ],
           ),
-          const Divider(height: 1),
-          _statusBar(context),
-        ]),
         ),
-        endDrawer: wide ? null : Drawer(child: SafeArea(child: LayersPanel(ed: ed))),
+        endDrawer: wide
+            ? null
+            : Drawer(
+                child: SafeArea(child: LayersPanel(ed: ed)),
+              ),
       ),
     );
   }
@@ -351,112 +374,229 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   List<PopupMenuEntry<String>> _viewItems({required bool includeLayers}) => [
-        CheckedPopupMenuItem(value: 'grid', checked: ed.showGrid, child: const Text('Grid')),
-        CheckedPopupMenuItem(value: 'snap', checked: ed.snapping, child: const Text('Snap to objects and mat')),
-        if (includeLayers) CheckedPopupMenuItem(value: 'layers', checked: showLayers, child: const Text('Layers panel')),
-        PopupMenuItem(value: 'units', child: Text(ed.project.units == Units.inch ? 'Use millimetres' : 'Use inches')),
-      ];
+    CheckedPopupMenuItem(value: 'grid', checked: ed.showGrid, child: const Text('Grid')),
+    CheckedPopupMenuItem(value: 'snap', checked: ed.snapping, child: const Text('Snap to objects and mat')),
+    if (includeLayers) CheckedPopupMenuItem(value: 'layers', checked: showLayers, child: const Text('Layers panel')),
+    PopupMenuItem(value: 'units', child: Text(ed.project.units == Units.inch ? 'Use millimetres' : 'Use inches')),
+  ];
 
   static const _exportItems = [
-    PopupMenuItem(value: 'svg', child: ListTile(leading: Icon(Icons.polyline_outlined), title: Text('SVG'), subtitle: Text('Vector, for any design or cutting app'))),
-    PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('PDF'), subtitle: Text('Vector at actual size'))),
-    PopupMenuItem(value: 'png', child: ListTile(leading: Icon(Icons.image_outlined), title: Text('PNG'), subtitle: Text('300 dpi image'))),
-    PopupMenuItem(value: 'odsx', child: ListTile(leading: Icon(Icons.save_alt), title: Text('Project file (.odsx)'), subtitle: Text('Back up or move to another device'))),
+    PopupMenuItem(
+      value: 'svg',
+      child: ListTile(leading: Icon(Icons.polyline_outlined), title: Text('SVG'), subtitle: Text('Vector, for any design or cutting app')),
+    ),
+    PopupMenuItem(
+      value: 'pdf',
+      child: ListTile(leading: Icon(Icons.picture_as_pdf_outlined), title: Text('PDF'), subtitle: Text('Vector at actual size')),
+    ),
+    PopupMenuItem(
+      value: 'png',
+      child: ListTile(leading: Icon(Icons.image_outlined), title: Text('PNG'), subtitle: Text('300 dpi image')),
+    ),
+    PopupMenuItem(
+      value: 'odsx',
+      child: ListTile(
+        leading: Icon(Icons.save_alt),
+        title: Text('Project file (.odsx)'),
+        subtitle: Text('Back up or move to another device'),
+      ),
+    ),
   ];
 
   List<Widget> _wideActions(BuildContext context) => [
-        IconButton(tooltip: 'Undo  ⌘Z', icon: const Icon(Icons.undo), onPressed: ed.canUndo ? ed.undo : null),
-        IconButton(tooltip: 'Redo  ⌘⇧Z', icon: const Icon(Icons.redo), onPressed: ed.canRedo ? ed.redo : null),
-        const BarDivider(),
-        IconButton(tooltip: 'Zoom to fit  ⌘0', icon: const Icon(Icons.fit_screen_outlined), onPressed: _fit),
-        PopupMenuButton<String>(
-          tooltip: 'View',
-          icon: const Icon(Icons.tune),
-          onSelected: _viewAction,
-          itemBuilder: (_) => _viewItems(includeLayers: MediaQuery.sizeOf(context).width > 900),
-        ),
-        IconButton(tooltip: 'Restore points', icon: const Icon(Icons.history), onPressed: () => showRestorePoints(context, ed)),
-        PopupMenuButton<String>(tooltip: 'Export', icon: const Icon(Icons.ios_share), onSelected: _viewAction, itemBuilder: (_) => _exportItems),
-        IconButton(tooltip: 'Keyboard shortcuts', icon: const Icon(Icons.keyboard_outlined), onPressed: () => showShortcuts(context)),
-        if (MediaQuery.sizeOf(context).width <= 900)
-          Builder(
-            builder: (context) => IconButton(
-              tooltip: 'Layers',
-              icon: const Icon(Icons.layers_outlined),
-              onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-          ),
-        const SizedBox(width: 8),
-        FilledButton.icon(onPressed: _makeIt, icon: const Icon(Icons.content_cut), label: const Text('Make it')),
-        const SizedBox(width: 12),
-      ];
+    IconButton(tooltip: 'Undo  ⌘Z', icon: const Icon(Icons.undo), onPressed: ed.canUndo ? ed.undo : null),
+    IconButton(tooltip: 'Redo  ⌘⇧Z', icon: const Icon(Icons.redo), onPressed: ed.canRedo ? ed.redo : null),
+    const BarDivider(),
+    IconButton(tooltip: 'Zoom to fit  ⌘0', icon: const Icon(Icons.fit_screen_outlined), onPressed: _fit),
+    PopupMenuButton<String>(
+      tooltip: 'View',
+      icon: const Icon(Icons.tune),
+      onSelected: _viewAction,
+      itemBuilder: (_) => _viewItems(includeLayers: MediaQuery.sizeOf(context).width > 900),
+    ),
+    IconButton(tooltip: 'Restore points', icon: const Icon(Icons.history), onPressed: () => showRestorePoints(context, ed)),
+    PopupMenuButton<String>(
+      tooltip: 'Export',
+      icon: const Icon(Icons.ios_share),
+      onSelected: _viewAction,
+      itemBuilder: (_) => _exportItems,
+    ),
+    IconButton(tooltip: 'Keyboard shortcuts', icon: const Icon(Icons.keyboard_outlined), onPressed: () => showShortcuts(context)),
+    if (MediaQuery.sizeOf(context).width <= 900)
+      Builder(
+        builder: (context) =>
+            IconButton(tooltip: 'Layers', icon: const Icon(Icons.layers_outlined), onPressed: () => Scaffold.of(context).openEndDrawer()),
+      ),
+    const SizedBox(width: 8),
+    FilledButton.icon(onPressed: _makeIt, icon: const Icon(Icons.content_cut), label: const Text('Make it')),
+    const SizedBox(width: 12),
+  ];
 
-  List<Widget> _compactActions(BuildContext context) => [
-        IconButton(tooltip: 'Undo', icon: const Icon(Icons.undo), onPressed: ed.canUndo ? ed.undo : null),
-        IconButton(tooltip: 'Redo', icon: const Icon(Icons.redo), onPressed: ed.canRedo ? ed.redo : null),
-        PopupMenuButton<String>(
-          tooltip: 'More',
-          onSelected: _viewAction,
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'fit', child: ListTile(leading: Icon(Icons.fit_screen_outlined), title: Text('Zoom to fit'))),
-            const PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Restore points'))),
-            const PopupMenuDivider(),
-            ..._viewItems(includeLayers: false),
-            const PopupMenuDivider(),
-            ..._exportItems,
-          ],
+  List<Widget> _compactActions(BuildContext context, {required bool phone}) => [
+        // Phones have Undo and Redo in the bottom toolbar.
+        if (!phone) ...[
+          IconButton(tooltip: 'Undo', icon: const Icon(Icons.undo), onPressed: ed.canUndo ? ed.undo : null),
+          IconButton(tooltip: 'Redo', icon: const Icon(Icons.redo), onPressed: ed.canRedo ? ed.redo : null),
+        ],
+    PopupMenuButton<String>(
+      tooltip: 'More',
+      onSelected: _viewAction,
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'fit',
+          child: ListTile(leading: Icon(Icons.fit_screen_outlined), title: Text('Zoom to fit')),
         ),
-        if (MediaQuery.sizeOf(context).width <= 900)
-          Builder(
-            builder: (context) => IconButton(
-              tooltip: 'Layers',
-              icon: const Icon(Icons.layers_outlined),
-              onPressed: () => Scaffold.of(context).openEndDrawer(),
-            ),
-          ),
-        IconButton.filled(tooltip: 'Make it', icon: const Icon(Icons.content_cut), onPressed: _makeIt),
-        const SizedBox(width: 8),
-      ];
+        const PopupMenuItem(
+          value: 'history',
+          child: ListTile(leading: Icon(Icons.history), title: Text('Restore points')),
+        ),
+        const PopupMenuDivider(),
+        ..._viewItems(includeLayers: false),
+        const PopupMenuDivider(),
+        ..._exportItems,
+      ],
+    ),
+    if (MediaQuery.sizeOf(context).width <= 900)
+      Builder(
+        builder: (context) =>
+            IconButton(tooltip: 'Layers', icon: const Icon(Icons.layers_outlined), onPressed: () => Scaffold.of(context).openEndDrawer()),
+      ),
+    IconButton.filled(tooltip: 'Make it', icon: const Icon(Icons.content_cut), onPressed: _makeIt),
+    const SizedBox(width: 8),
+  ];
 
+  static const _tools = [
+    (Tool.select, Icons.near_me_outlined, 'Select', 'V'),
+    (Tool.node, Icons.polyline_outlined, 'Points', 'N'),
+    (Tool.pen, Icons.draw_outlined, 'Pen', 'P'),
+    (Tool.eraser, Icons.auto_fix_normal_outlined, 'Eraser', 'E'),
+    (Tool.crop, Icons.crop, 'Crop', 'C'),
+  ];
+
+  static const _shapeIcons = {
+    ShapeKind.square: Icons.square_outlined,
+    ShapeKind.circle: Icons.circle_outlined,
+    ShapeKind.triangle: Icons.change_history,
+    ShapeKind.polygon: Icons.hexagon_outlined,
+    ShapeKind.star: Icons.star_outline,
+    ShapeKind.heart: Icons.favorite_outline,
+    ShapeKind.line: Icons.horizontal_rule,
+  };
+
+  List<PopupMenuEntry<ShapeKind>> _shapeItems() => [
+    for (final k in ShapeKind.values)
+      PopupMenuItem(
+        value: k,
+        child: ListTile(leading: Icon(_shapeIcons[k]), title: Text(k.label)),
+      ),
+  ];
+
+  static const _importItems = [
+    PopupMenuItem(
+      value: 'image',
+      child: ListTile(leading: Icon(Icons.image_outlined), title: Text('Image'), subtitle: Text('PNG, JPG, GIF, WebP')),
+    ),
+    PopupMenuItem(
+      value: 'svg',
+      child: ListTile(leading: Icon(Icons.polyline_outlined), title: Text('SVG')),
+    ),
+    PopupMenuItem(
+      value: 'font',
+      child: ListTile(leading: Icon(Icons.font_download_outlined), title: Text('Font'), subtitle: Text('TrueType .ttf / .ttc')),
+    ),
+  ];
+
+  /// Desktop and tablet: a labelled column of tools on the left.
   Widget _toolRail(BuildContext context) {
-    Widget tool(Tool t, IconData i, String tip) => ToolButton(icon: i, tooltip: tip, selected: ed.tool == t, onPressed: () => ed.setTool(t));
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: SizedBox(
-        width: 56,
+        width: 68,
+        height: double.infinity,
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(children: [
-            tool(Tool.select, Icons.near_me_outlined, 'Select  V'),
-            tool(Tool.node, Icons.polyline_outlined, 'Edit points  N'),
-            tool(Tool.pen, Icons.draw_outlined, 'Pen  P'),
-            tool(Tool.eraser, Icons.auto_fix_normal_outlined, 'Eraser  E'),
-            tool(Tool.crop, Icons.crop, 'Crop  C'),
-            const Divider(indent: 12, endIndent: 12),
-            PopupMenuButton<ShapeKind>(
-              tooltip: 'Shapes',
-              icon: const Icon(Icons.category_outlined),
-              onSelected: ed.addShape,
-              itemBuilder: (_) => [for (final k in ShapeKind.values) PopupMenuItem(value: k, child: Text(k.label))],
-            ),
-            ToolButton(icon: Icons.text_fields, tooltip: 'Text  T', onPressed: _addText),
-            PopupMenuButton<String>(
-              tooltip: 'Import',
-              icon: const Icon(Icons.file_upload_outlined),
-              onSelected: _import,
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'image', child: ListTile(leading: Icon(Icons.image_outlined), title: Text('Image'), subtitle: Text('PNG, JPG, GIF, WebP'))),
-                PopupMenuItem(value: 'svg', child: ListTile(leading: Icon(Icons.polyline_outlined), title: Text('SVG'))),
-                PopupMenuItem(value: 'font', child: ListTile(leading: Icon(Icons.font_download_outlined), title: Text('Font'), subtitle: Text('TrueType .ttf / .ttc'))),
-              ],
-            ),
-          ]),
+          child: Column(
+            children: [
+              for (final (t, icon, label, key) in _tools)
+                RailButton(icon: icon, label: label, tooltip: '$label  $key', selected: ed.tool == t, onTap: () => ed.setTool(t)),
+              const Divider(indent: 14, endIndent: 14, height: 16),
+              PopupMenuButton<ShapeKind>(
+                tooltip: 'Shapes',
+                onSelected: ed.addShape,
+                itemBuilder: (_) => _shapeItems(),
+                child: const RailButton(icon: Icons.category_outlined, label: 'Shapes'),
+              ),
+              RailButton(icon: Icons.text_fields, label: 'Text', tooltip: 'Text  T', onTap: _addText),
+              PopupMenuButton<String>(
+                tooltip: 'Import',
+                onSelected: _import,
+                itemBuilder: (_) => _importItems,
+                child: const RailButton(icon: Icons.file_upload_outlined, label: 'Import'),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _statusBar(BuildContext context) {
+  /// Phones: tools along the bottom, within reach of a thumb.
+  Widget _bottomBar(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final current = _tools.firstWhere((t) => t.$1 == ed.tool);
+    return Material(
+      color: scheme.surface,
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          children: [
+            Expanded(
+              child: PopupMenuButton<Tool>(
+                tooltip: 'Tool',
+                onSelected: ed.setTool,
+                itemBuilder: (_) => [
+                  for (final (t, icon, label, _) in _tools)
+                    CheckedPopupMenuItem(
+                      value: t,
+                      checked: ed.tool == t,
+                      child: Row(children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(label)]),
+                    ),
+                ],
+                child: RailButton(icon: current.$2, label: current.$3, selected: true, dropdown: true),
+              ),
+            ),
+            Expanded(
+              child: PopupMenuButton<ShapeKind>(
+                tooltip: 'Shapes',
+                onSelected: ed.addShape,
+                itemBuilder: (_) => _shapeItems(),
+                child: const RailButton(icon: Icons.category_outlined, label: 'Shapes'),
+              ),
+            ),
+            Expanded(
+              child: RailButton(icon: Icons.text_fields, label: 'Text', onTap: _addText),
+            ),
+            Expanded(
+              child: PopupMenuButton<String>(
+                tooltip: 'Import',
+                onSelected: _import,
+                itemBuilder: (_) => _importItems,
+                child: const RailButton(icon: Icons.file_upload_outlined, label: 'Import'),
+              ),
+            ),
+            Expanded(
+              child: RailButton(icon: Icons.undo, label: 'Undo', enabled: ed.canUndo, onTap: ed.undo),
+            ),
+            Expanded(
+              child: RailButton(icon: Icons.redo, label: 'Redo', enabled: ed.canRedo, onTap: ed.redo),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusBar(BuildContext context, {bool phone = false}) {
     final scheme = Theme.of(context).colorScheme;
     final u = ed.project.units;
     final style = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
@@ -464,28 +604,35 @@ class _EditorScreenState extends State<EditorScreen> {
       height: 28,
       color: scheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(children: [
-        Expanded(child: Text(ed.status ?? (ed.fonts.ready ? '' : 'Loading fonts…'), style: style, overflow: TextOverflow.ellipsis)),
-        ValueListenableBuilder(
-          valueListenable: cursor,
-          builder: (context, c, _) => c == null
-              ? const SizedBox()
-              : Text('${u.fromMm(c.dx).toStringAsFixed(2)}, ${u.fromMm(c.dy).toStringAsFixed(2)} ${u.suffix}', style: style),
-        ),
-        const SizedBox(width: 16),
-        ListenableBuilder(
-          listenable: vp,
-          builder: (context, _) => Text('${(vp.zoom / (96 / 25.4) * 100).round()}%', style: style),
-        ),
-        const SizedBox(width: 16),
-        Text('${ed.selection.length} selected', style: style),
-      ]),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(ed.status ?? (ed.fonts.ready ? '' : 'Loading fonts…'), style: style, overflow: TextOverflow.ellipsis),
+          ),
+          if (!phone) ...[
+            ValueListenableBuilder(
+              valueListenable: cursor,
+              builder: (context, c, _) => c == null
+                  ? const SizedBox()
+                  : Text('${u.fromMm(c.dx).toStringAsFixed(2)}, ${u.fromMm(c.dy).toStringAsFixed(2)} ${u.suffix}', style: style),
+            ),
+            const SizedBox(width: 16),
+            ListenableBuilder(
+              listenable: vp,
+              builder: (context, _) => Text('${(vp.zoom / (96 / 25.4) * 100).round()}%', style: style),
+            ),
+            const SizedBox(width: 16),
+            Text('${ed.selection.length} selected', style: style),
+          ],
+        ],
+      ),
     );
   }
 }
 
 class _EmptyHint extends StatelessWidget {
-  const _EmptyHint();
+  const _EmptyHint({required this.phone});
+  final bool phone;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -496,7 +643,7 @@ class _EmptyHint extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(color: scheme.inverseSurface.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(20)),
           child: Text(
-            'Blank canvas. Add text, a shape or an image with the tools on the left. Everything saves on this device.',
+            'Blank canvas. Add text, a shape or an image with the tools ${phone ? 'below' : 'on the left'}. Everything saves on this device.',
             style: TextStyle(color: scheme.onInverseSurface),
           ),
         ),

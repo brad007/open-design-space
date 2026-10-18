@@ -391,7 +391,11 @@ void showShortcuts(BuildContext context) => showDialog<void>(
 void showAboutApp(BuildContext context) => showAboutDialog(
       context: context,
       applicationName: 'Open Design Space',
-      applicationVersion: '0.1.0',
+      applicationVersion: '0.1.1',
+      applicationIcon: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset('assets/branding/app_icon.png', width: 56, height: 56),
+      ),
       applicationLegalese: 'MIT License. An independent, offline-first design tool for cutting machines. '
           'Not affiliated with or endorsed by any cutting-machine manufacturer.',
     );

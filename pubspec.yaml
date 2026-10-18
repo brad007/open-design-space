@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ^3.13.3
@@ -54,6 +54,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -69,6 +70,7 @@ flutter:
   # Bundled so text works where the system fonts can't be read (iOS, Android, web).
   assets:
     - assets/fonts/
+    - assets/branding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -100,3 +102,28 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# App icons for every platform. Sources are drawn by test/app_icon_test.dart.
+# Regenerate with: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  android: true
+  adaptive_icon_background: "#12A594"
+  adaptive_icon_foreground: assets/icon/foreground.png
+  ios: true
+  remove_alpha_ios: true
+  image_path_ios_dark_transparent: assets/icon/icon_ios_dark.png
+  image_path_ios_tinted_grayscale: assets/icon/icon_ios_tinted.png
+  desaturate_tinted_to_grayscale_ios: true
+  web:
+    generate: true
+    image_path: assets/icon/icon.png
+    background_color: "#12A594"
+    theme_color: "#12A594"
+  windows:
+    generate: true
+    image_path: assets/icon/icon.png
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: assets/icon/icon_macos.png

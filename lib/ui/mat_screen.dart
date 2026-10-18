@@ -13,6 +13,7 @@ import '../model/objects.dart';
 import '../model/project.dart';
 import '../platform/platform.dart';
 import '../state/editor.dart';
+import 'edit_bar.dart' show FadingRow;
 import 'files.dart';
 import 'image_cache.dart';
 import 'render.dart';
@@ -45,8 +46,7 @@ class _MatScreenState extends State<MatScreen> {
     setState(() {});
   }
 
-  void _toast(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), behavior: SnackBarBehavior.floating));
+  void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), behavior: SnackBarBehavior.floating));
 
   Future<void> _exportMat(Mat mat, CutterDriver d) async {
     final bytes = await d.render(mat, ed.project);
@@ -75,10 +75,7 @@ class _MatScreenState extends State<MatScreen> {
       final bytes = await d.render(m, ed.project);
       await store.writeAtomic('${i.toString().padLeft(2, '0')} ${safeFileName(m.label)}.${d.fileExtension}', bytes);
       if (m.isPrint) {
-        await store.writeAtomic(
-          '${i.toString().padLeft(2, '0')} print sheet.pdf',
-          await exportPrintSheetPdf(m, ed.project),
-        );
+        await store.writeAtomic('${i.toString().padLeft(2, '0')} print sheet.pdf', await exportPrintSheetPdf(m, ed.project));
       }
     }
     _toast('Saved $i mat file${i == 1 ? '' : 's'} to $dir');
@@ -100,30 +97,27 @@ class _MatScreenState extends State<MatScreen> {
               builder: (context) => IconButton(
                 tooltip: 'Mat settings',
                 icon: const Icon(Icons.view_sidebar_outlined),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+                onPressed: () => Scaffold.of(context).openEndDrawer(),
               ),
             ),
           if (!isMobile)
-          PopupMenuButton<CutterDriver>(
-            enabled: all.isNotEmpty,
-            tooltip: 'Export every mat to a folder',
-            onSelected: (d) => _exportAll(all, d),
-            itemBuilder: (_) => [
-              for (final d in builtInDrivers)
-                PopupMenuItem(
-                  value: d,
-                  child: ListTile(title: Text('All mats as ${d.name}'), subtitle: Text(d.description)),
-                ),
-            ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(Icons.drive_folder_upload_outlined),
+            PopupMenuButton<CutterDriver>(
+              enabled: all.isNotEmpty,
+              tooltip: 'Export every mat to a folder',
+              onSelected: (d) => _exportAll(all, d),
+              itemBuilder: (_) => [
+                for (final d in builtInDrivers)
+                  PopupMenuItem(
+                    value: d,
+                    child: ListTile(title: Text('All mats as ${d.name}'), subtitle: Text(d.description)),
+                  ),
+              ],
+              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Icon(Icons.drive_folder_upload_outlined)),
             ),
-          ),
           const SizedBox(width: 12),
         ],
       ),
-      drawer: wide ? null : Drawer(width: 320, child: SafeArea(child: side)),
+      endDrawer: wide ? null : Drawer(width: 320, child: SafeArea(child: side)),
       body: all.isEmpty
           ? Center(
               child: Column(
@@ -138,7 +132,14 @@ class _MatScreenState extends State<MatScreen> {
           : Row(
               children: [
                 if (wide) ...[SizedBox(width: 320, child: side), const VerticalDivider(width: 1)],
-                Expanded(child: current == null ? const SizedBox() : _matView(context, current)),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: current == null ? const SizedBox() : _matView(context, current)),
+                      if (!wide) ...[const Divider(height: 1), _matStrip(context, all, current)],
+                    ],
+                  ),
+                ),
               ],
             ),
     );
@@ -156,7 +157,13 @@ class _MatScreenState extends State<MatScreen> {
           isExpanded: true,
           initialValue: s.matSize.name,
           decoration: const InputDecoration(labelText: 'Mat size', border: OutlineInputBorder()),
-          items: [for (final m in MatSize.presets) DropdownMenuItem(value: m.name, child: Text(m.name, overflow: TextOverflow.ellipsis))],
+          items: [
+            for (final m in MatSize.presets)
+              DropdownMenuItem(
+                value: m.name,
+                child: Text(m.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
           onChanged: (v) {
             s.matSize = MatSize.presets.firstWhere((m) => m.name == v);
             _changed();
@@ -204,10 +211,7 @@ class _MatScreenState extends State<MatScreen> {
           isExpanded: true,
           initialValue: s.printSheet.name,
           decoration: const InputDecoration(labelText: 'Paper', border: OutlineInputBorder()),
-          items: [
-            for (final m in MatSize.presets.where((m) => m.width < 300))
-              DropdownMenuItem(value: m.name, child: Text(m.name)),
-          ],
+          items: [for (final m in MatSize.presets.where((m) => m.width < 300)) DropdownMenuItem(value: m.name, child: Text(m.name))],
           onChanged: (v) {
             s.printSheet = MatSize.presets.firstWhere((m) => m.name == v);
             _changed();
@@ -273,13 +277,11 @@ class _MatScreenState extends State<MatScreen> {
                   children: [
                     ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_indicator, size: 18)),
                     const SizedBox(width: 4),
-                    m.isPrint ? const Icon(Icons.print_outlined, size: 20) : ColorDot(m.color, size: 20),
+                    MatThumb(mat: m, size: 44),
                   ],
                 ),
                 title: Text('${i + 1}. ${m.label}'),
-                subtitle: Text(
-                  '${m.items.length} item${m.items.length == 1 ? '' : 's'}${m.mirror ? ' · mirrored' : ''}',
-                ),
+                subtitle: Text('${m.items.length} item${m.items.length == 1 ? '' : 's'}${m.mirror ? ' · mirrored' : ''}'),
                 trailing: m.warnings.isNotEmpty
                     ? Tooltip(
                         message: m.warnings.join('\n'),
@@ -293,6 +295,54 @@ class _MatScreenState extends State<MatScreen> {
     );
   }
 
+  /// Phones and small tablets switch mats from a strip of thumbnails.
+  Widget _matStrip(BuildContext context, List<Mat> all, Mat? current) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      child: SizedBox(
+        height: 92,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          itemCount: all.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, i) {
+            final m = all[i];
+            final sel = m.key == current?.key;
+            return InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => setState(() {
+                selectedMat = m.key;
+                selectedItem = null;
+              }),
+              child: Container(
+                width: 76,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: sel ? scheme.primary : scheme.outlineVariant, width: sel ? 2 : 1),
+                ),
+                child: Column(
+                  children: [
+                    Expanded(child: MatThumb(mat: m, size: 48)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${i + 1}. ${m.isPrint ? 'Print' : colorName(m.color)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _matView(BuildContext context, Mat mat) {
     final scheme = Theme.of(context).colorScheme;
     final item = mat.items.where((i) => i.key == selectedItem).firstOrNull;
@@ -302,9 +352,9 @@ class _MatScreenState extends State<MatScreen> {
         Material(
           color: scheme.surface,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: FadingRow(
+              height: 40,
               child: Row(
                 children: [
                   Text(mat.label, style: Theme.of(context).textTheme.titleMedium),
@@ -338,10 +388,7 @@ class _MatScreenState extends State<MatScreen> {
                     Text(item.objects.first.name),
                     TextButton(
                       onPressed: () {
-                        s.placements[item.key] = MatPlacement(
-                          '${mat.baseKey}#${int.parse(mat.key.split('#').last) + 1}',
-                          item.offset,
-                        );
+                        s.placements[item.key] = MatPlacement('${mat.baseKey}#${int.parse(mat.key.split('#').last) + 1}', item.offset);
                         _changed();
                       },
                       child: const Text('Move to next mat'),
@@ -349,10 +396,7 @@ class _MatScreenState extends State<MatScreen> {
                     if (int.parse(mat.key.split('#').last) > 1)
                       TextButton(
                         onPressed: () {
-                          s.placements[item.key] = MatPlacement(
-                            '${mat.baseKey}#${int.parse(mat.key.split('#').last) - 1}',
-                            item.offset,
-                          );
+                          s.placements[item.key] = MatPlacement('${mat.baseKey}#${int.parse(mat.key.split('#').last) - 1}', item.offset);
                           _changed();
                         },
                         child: const Text('Move to previous mat'),
@@ -641,4 +685,55 @@ class _MatPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+/// A small picture of a mat and what's on it.
+class MatThumb extends StatelessWidget {
+  const MatThumb({super.key, required this.mat, this.size = 44});
+  final Mat mat;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: CustomPaint(painter: _ThumbPainter(mat, Theme.of(context).colorScheme)),
+  );
+}
+
+class _ThumbPainter extends CustomPainter {
+  _ThumbPainter(this.mat, this.scheme);
+  final Mat mat;
+  final ColorScheme scheme;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = math.min(size.width / mat.size.width, size.height / mat.size.height);
+    canvas.translate((size.width - mat.size.width * s) / 2, (size.height - mat.size.height * s) / 2);
+    canvas.scale(s);
+    final r = Offset.zero & mat.size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(r, Radius.circular(4 / s)),
+      Paint()..color = mat.isPrint ? Colors.white : const Color(0xFFE9F2EC),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(r, Radius.circular(4 / s)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1 / s
+        ..color = scheme.outline,
+    );
+    for (final it in mat.items) {
+      for (final (o, polys) in it.polylines) {
+        final path = Path()..fillType = PathFillType.evenOdd;
+        for (final p in polys) {
+          path.addPolygon([for (final q in p) q + it.offset], true);
+        }
+        canvas.drawPath(path, Paint()..color = Color(o.color));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThumbPainter old) => old.mat != mat;
 }

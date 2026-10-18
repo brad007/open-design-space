@@ -66,8 +66,26 @@ class EditorController extends ChangeNotifier {
 
   List<Map<String, dynamic>> _clipboard = [];
 
+  bool _disposed = false;
+
+  /// Saves outstanding changes, then disposes. Used when the editor closes.
+  Future<void> closeAndDispose() async {
+    _autosave?.cancel();
+    try {
+      if (dirty) await save();
+    } finally {
+      dispose();
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     fonts.removeListener(_onFontsChanged);
     _autosave?.cancel();
     super.dispose();
@@ -150,6 +168,7 @@ class EditorController extends ChangeNotifier {
     dirty = true;
     notifyListeners();
     _autosave?.cancel();
+    if (_disposed) return;
     _autosave = Timer(const Duration(milliseconds: 1200), save);
   }
 
