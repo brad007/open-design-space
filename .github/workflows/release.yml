@@ -1,0 +1,116 @@
+name: Release
+
+# Push a tag like v0.1.0 to build every platform and publish a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.47.4
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: android
+            os: ubuntu-latest
+          - target: macos
+            os: macos-latest
+          - target: windows
+            os: windows-latest
+          - target: linux
+            os: ubuntu-latest
+          - target: web
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - if: matrix.target == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev clang cmake pkg-config
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: mkdir -p dist
+        shell: bash
+
+      - name: Android APK
+        if: matrix.target == 'android'
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/OpenDesignSpace-${TAG}-android.apk"
+
+      - name: macOS app
+        if: matrix.target == 'macos'
+        run: |
+          flutter build macos --release
+          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/Open Design Space.app" "dist/OpenDesignSpace-${TAG}-macos.zip"
+
+      - name: Windows app
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: |
+          flutter build windows --release
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "dist/OpenDesignSpace-$env:TAG-windows-x64.zip"
+
+      - name: Linux app
+        if: matrix.target == 'linux'
+        run: |
+          flutter build linux --release
+          tar -C build/linux/x64/release/bundle -czf "dist/OpenDesignSpace-${TAG}-linux-x64.tar.gz" .
+
+      - name: Web app
+        if: matrix.target == 'web'
+        run: |
+          flutter build web --release --base-href /
+          (cd build/web && zip -qr "../../dist/OpenDesignSpace-${TAG}-web.zip" .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Open Design Space ${{ env.TAG }}
+          body_path: docs/RELEASE_NOTES.md
+          files: dist/*
+          fail_on_unmatched_files: true

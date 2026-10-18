@@ -10,6 +10,17 @@ files on your computer.
 > tested, but output has not yet been checked on real cutting machines. Direct
 > machine control isn't included (see [Cutting](#cutting)).
 
+## Download
+
+Get the latest version from
+**[Releases](https://github.com/brad007/open-design-space/releases/latest)**:
+Windows, macOS, Linux, Android and a web build. The release page explains how
+to install each one. The builds aren't signed with a paid certificate, so expect
+a one-time security prompt.
+
+There's no iPhone or iPad download yet, because Apple requires a developer
+account to distribute apps. You can build it from source (below).
+
 ## Why
 
 Open Design Space was built from public feedback about existing cutting-machine
@@ -38,7 +49,7 @@ feature.
 | --- | --- |
 | ![Mats](docs/screenshots/mats.png) | ![Projects](docs/screenshots/library.png) |
 
-## Run it
+## Build from source
 
 You'll need [Flutter](https://docs.flutter.dev/get-started/install) 3.47 or newer.
 
