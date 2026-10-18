@@ -471,7 +471,7 @@ void showShortcuts(BuildContext context) => showDialog<void>(
 void showAboutApp(BuildContext context) => showAboutDialog(
       context: context,
       applicationName: 'Open Design Space',
-      applicationVersion: '0.1.1',
+      applicationVersion: '0.1.2',
       applicationIcon: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.asset('assets/branding/app_icon.png', width: 56, height: 56),

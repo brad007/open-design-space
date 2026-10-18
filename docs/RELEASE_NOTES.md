@@ -2,6 +2,14 @@ An open-source, offline-first design app for cutting machines. Early alpha:
 the design tools and exports are tested, but output hasn't been checked on
 real cutting machines yet.
 
+## New in this version
+
+- **Text along any path** — curve lettering around a shape or line you draw.
+- **Remove an image background** — right on the canvas, with undo.
+- **Bigger text and icons** — an interface size setting for easier reading.
+- **Finer nudging** — move a selection in smaller steps for precise lining-up.
+- **Smoother with large designs** — faster drawing when there's a lot on the mat.
+
 ## Download
 
 | Platform | File |
