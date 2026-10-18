@@ -49,3 +49,6 @@ app.*.map.json
 
 # Local reverse-engineering output (never published)
 /rea-output/
+
+# Collected research data (other people's posts; never published)
+/research-data/
