@@ -10,14 +10,39 @@ import '../model/project.dart';
 import 'image_cache.dart';
 
 /// Strokes a path with dashes of [dash] and gaps of [gap] (canvas units).
-void drawDashed(Canvas canvas, Path path, Paint paint, double dash, double gap) {
+void drawDashed(Canvas canvas, Path path, Paint paint, double dash, double gap) =>
+    canvas.drawPath(dashedPath(path, dash, gap), paint);
+
+final _dashCache = Expando<(double, double, Path)>();
+
+/// [path] cut into dashes, as one path. Cached per source path, so dashing a
+/// cached object outline costs nothing on later frames.
+Path dashedPath(Path path, double dash, double gap) {
+  final hit = _dashCache[path];
+  if (hit != null && hit.$1 == dash && hit.$2 == gap) return hit.$3;
+  final out = Path();
   for (final m in path.computeMetrics()) {
     var d = 0.0;
     while (d < m.length) {
-      canvas.drawPath(m.extractPath(d, math.min(d + dash, m.length)), paint);
+      out.addPath(m.extractPath(d, math.min(d + dash, m.length)), Offset.zero);
       d += dash + gap;
     }
   }
+  _dashCache[path] = (dash, gap, out);
+  return out;
+}
+
+final _pathCache = Expando<(int, Path)>();
+
+/// [o]'s outline as a Path in local units, rebuilt only when its geometry
+/// changes. Building paths every frame was the main cost with big designs.
+Path objectPath(DesignObject o) {
+  final key = o.geometryKey;
+  final hit = _pathCache[o];
+  if (hit != null && hit.$1 == key) return hit.$2;
+  final path = contoursToPath(o.localContours);
+  _pathCache[o] = (key, path);
+  return path;
 }
 
 /// Draws one object in canvas units of millimetres. [pxPerMm] keeps hairlines
@@ -28,7 +53,7 @@ void paintObject(Canvas canvas, DesignObject o, AssetImages? images, double pxPe
   canvas.save();
   canvas.transform(o.xform.toMatrix4());
   final local = o.localContours;
-  final path = contoursToPath(local);
+  final path = objectPath(o);
   final closed = local.isNotEmpty && local.every((c) => c.closed);
   final scale = (o.xform.sx.abs() + o.xform.sy.abs()) / 2;
   final strokeW = (0.5 / scale).clamp(hair, double.infinity);

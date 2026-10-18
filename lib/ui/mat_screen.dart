@@ -17,6 +17,7 @@ import 'edit_bar.dart' show FadingRow;
 import 'files.dart';
 import 'image_cache.dart';
 import 'render.dart';
+import 'ui_scale.dart';
 import 'widgets.dart';
 
 /// Lays the design out on mats. Users can drag items anywhere, choose the
@@ -117,7 +118,7 @@ class _MatScreenState extends State<MatScreen> {
           const SizedBox(width: 12),
         ],
       ),
-      endDrawer: wide ? null : Drawer(width: 320, child: SafeArea(child: side)),
+      endDrawer: wide ? null : Drawer(width: scaled(context, 320), child: SafeArea(child: side)),
       body: all.isEmpty
           ? Center(
               child: Column(
@@ -131,7 +132,7 @@ class _MatScreenState extends State<MatScreen> {
             )
           : Row(
               children: [
-                if (wide) ...[SizedBox(width: 320, child: side), const VerticalDivider(width: 1)],
+                if (wide) ...[SizedBox(width: scaled(context, 320), child: side), const VerticalDivider(width: 1)],
                 Expanded(
                   child: Column(
                     children: [
@@ -179,7 +180,9 @@ class _MatScreenState extends State<MatScreen> {
             _changed();
           },
         ),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             NumberField(
               label: 'Spacing',
@@ -191,7 +194,6 @@ class _MatScreenState extends State<MatScreen> {
                 _changed();
               },
             ),
-            const SizedBox(width: 8),
             NumberField(
               label: 'Edge margin',
               suffix: u.suffix,
@@ -239,8 +241,7 @@ class _MatScreenState extends State<MatScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Text('Mats (cut order)', style: Theme.of(context).textTheme.titleSmall),
-            const Spacer(),
+            Expanded(child: Text('Mats (cut order)', style: Theme.of(context).textTheme.titleSmall)),
             if (s.order.isNotEmpty)
               TextButton(
                 onPressed: () {
@@ -301,7 +302,7 @@ class _MatScreenState extends State<MatScreen> {
     return Material(
       color: scheme.surface,
       child: SizedBox(
-        height: 92,
+        height: scaled(context, 92),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -317,7 +318,7 @@ class _MatScreenState extends State<MatScreen> {
                 selectedItem = null;
               }),
               child: Container(
-                width: 76,
+                width: scaled(context, 76),
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
@@ -354,7 +355,7 @@ class _MatScreenState extends State<MatScreen> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             child: FadingRow(
-              height: 40,
+              height: scaled(context, 40),
               child: Row(
                 children: [
                   Text(mat.label, style: Theme.of(context).textTheme.titleMedium),

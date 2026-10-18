@@ -168,6 +168,20 @@ class Xform {
 
   Xform translated(Offset d) => copyWith(tx: tx + d.dx, ty: ty + d.dy);
 
+  /// Like [apply], with the rotation worked out once for many points.
+  Offset Function(Offset) get mapper {
+    final c = math.cos(rotation), s = math.sin(rotation);
+    final a = c * sx, b = s * sx, cc = -s * sy, d = c * sy;
+    return (p) => Offset(p.dx * a + p.dy * cc + tx, p.dx * b + p.dy * d + ty);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Xform && other.tx == tx && other.ty == ty && other.rotation == rotation && other.sx == sx && other.sy == sy;
+
+  @override
+  int get hashCode => Object.hash(tx, ty, rotation, sx, sy);
+
   Float64List toMatrix4() {
     final c = math.cos(rotation), s = math.sin(rotation);
     return Float64List.fromList([
@@ -204,6 +218,24 @@ Rect boundsOfPoints(Iterable<Offset> pts) {
 
 Rect boundsOfContours(List<Contour> contours) =>
     boundsOfPoints(contours.expand((c) => c.flatten(0.2)));
+
+/// A cheap hash of every node and handle. Geometry is edited in place, so
+/// caches compare this instead of list identity.
+int contoursFingerprint(List<Contour> contours) {
+  var h = contours.length;
+  int mix(int h, double v) => (h * 31 + v.hashCode) & 0x3fffffff;
+  for (final c in contours) {
+    h = mix(h, c.closed ? 1 : 2);
+    for (final n in c.nodes) {
+      h = mix(mix(h, n.p.dx), n.p.dy);
+      final i = n.cIn, o = n.cOut;
+      if (i != null) h = mix(mix(h, i.dx), i.dy);
+      if (o != null) h = mix(mix(h, o.dx), o.dy);
+      h = mix(h, i == null ? 3 : o == null ? 4 : 5);
+    }
+  }
+  return h;
+}
 
 Path contoursToPath(List<Contour> contours, {Offset Function(Offset)? map}) {
   final f = map ?? (Offset o) => o;

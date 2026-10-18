@@ -20,6 +20,8 @@ enum Operation {
 
 enum TextAlign2 { left, center, right }
 
+final _boundsCache = Expando<(int, Xform, Rect)>();
+
 sealed class DesignObject {
   DesignObject({
     required this.id,
@@ -48,19 +50,36 @@ sealed class DesignObject {
   /// Geometry in local coordinates, roughly centered on the origin.
   List<Contour> get localContours;
 
-  List<Contour> worldContours() =>
-      [for (final c in localContours) c.transformed(xform.apply)];
+  List<Contour> worldContours() {
+    final f = xform.mapper;
+    return [for (final c in localContours) c.transformed(f)];
+  }
 
   List<List<Offset>> worldPolylines([double tolerance = 0.05]) {
     final scale = (xform.sx.abs() + xform.sy.abs()) / 2;
     final t = tolerance / (scale == 0 ? 1 : scale);
+    final f = xform.mapper;
     return [
       for (final c in localContours)
-        if (c.nodes.length > 1) [for (final p in c.flatten(t)) xform.apply(p)],
+        if (c.nodes.length > 1) [for (final p in c.flatten(t)) f(p)],
     ];
   }
 
-  Rect worldBounds() => boundsOfPoints(worldPolylines(0.2).expand((e) => e));
+  /// Snapping, marquee selection and the edit bar ask for this many times a
+  /// frame, so it's cached until the geometry or transform changes.
+  Rect worldBounds() {
+    final key = geometryKey;
+    final hit = _boundsCache[this];
+    if (hit != null && hit.$1 == key && hit.$2 == xform) return hit.$3;
+    final r = computeWorldBounds();
+    _boundsCache[this] = (key, xform, r);
+    return r;
+  }
+
+  /// Changes whenever the local geometry does.
+  int get geometryKey => contoursFingerprint(localContours);
+
+  Rect computeWorldBounds() => boundsOfPoints(worldPolylines(0.2).expand((e) => e));
 
   Map<String, dynamic> baseJson() => {
         'kind': kind,
@@ -312,11 +331,14 @@ class ImageObject extends DesignObject {
   static Contour _rectContour(Rect r) =>
       Contour.polyline([r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]);
 
+  @override
+  int get geometryKey => Object.hash(super.geometryKey, visibleRect);
+
   /// Covers both the picture and its cut line.
   @override
-  Rect worldBounds() {
+  Rect computeWorldBounds() {
     final pic = boundsOfPoints(_rectContour(visibleRect).nodes.map((n) => xform.apply(n.p)));
-    return cutOutline == null ? pic : pic.expandToInclude(super.worldBounds());
+    return cutOutline == null ? pic : pic.expandToInclude(super.computeWorldBounds());
   }
 
   @override

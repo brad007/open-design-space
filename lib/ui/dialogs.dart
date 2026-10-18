@@ -5,6 +5,7 @@ import '../geometry/trace.dart';
 import '../model/project.dart';
 import '../state/editor.dart';
 import '../text/font_registry.dart';
+import 'ui_scale.dart';
 
 Future<String?> promptText(BuildContext context, {required String title, String initial = '', String? label, String action = 'OK'}) {
   final c = TextEditingController(text: initial);
@@ -353,7 +354,8 @@ const shortcutHelp = [
   ('⌘W', 'Weld'),
   ('⌘[ / ⌘]', 'Send backward / bring forward'),
   ('Delete', 'Delete selection or node'),
-  ('Arrows', 'Nudge (Shift: 10×)'),
+  ('Arrows', 'Nudge 1 mm or 1/16 in (Shift: 10×)'),
+  ('⌥ / Alt + arrows', 'Fine nudge: 0.1 mm or 1/100 in'),
   ('⌘0', 'Zoom to fit'),
   ('⌘= / ⌘-', 'Zoom in / out'),
   ('Space + drag', 'Pan'),
@@ -364,6 +366,31 @@ const shortcutHelp = [
   ('⌘⇧S', 'Save a restore point'),
   ('⌘M', 'Make it (mat preview)'),
 ];
+
+/// Lets people make text and icons bigger (or a little smaller). Changes
+/// apply as soon as a size is picked.
+void showInterfaceSize(BuildContext context, UiScale scale) => showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Interface size'),
+        content: ListenableBuilder(
+          listenable: scale,
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Makes text and icons bigger on this device. Designs are not affected.'),
+              const SizedBox(height: 16),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final v in UiScale.steps)
+                  ChoiceChip(label: Text(UiScale.label(v)), selected: (scale.value - v).abs() < 0.001, onSelected: (_) => scale.set(v)),
+              ]),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+      ),
+    );
 
 void showShortcuts(BuildContext context) => showDialog<void>(
       context: context,
